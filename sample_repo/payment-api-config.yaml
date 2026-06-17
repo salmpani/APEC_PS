@@ -1,0 +1,8 @@
+service: payment-api
+data_classification: customer_payment_data
+retention_years: 15
+tls_key_exchange: ECDHE-RSA
+certificate_signature: ECDSA
+allowed_protocols:
+  - TLSv1.0
+  - TLSv1.2
