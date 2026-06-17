@@ -58,6 +58,16 @@ st.set_page_config(page_title=f"{APP_TITLE} - {APP_SUBTITLE}", layout="wide")
 st.markdown(
     """
     <style>
+      :root {
+        --apec-navy: #07185f;
+        --apec-blue: #0ea5e9;
+        --apec-cyan: #38bdf8;
+        --apec-magenta: #b516b5;
+        --apec-ink: #0f172a;
+        --apec-muted: #64748b;
+        --apec-panel: #ffffff;
+        --apec-line: #d8e0ea;
+      }
       .stApp { background: #f8fafc; color: #0f172a; }
       [data-testid="stSidebar"] { background: #eef2f7; }
       .stApp,
@@ -103,6 +113,133 @@ st.markdown(
         background: #e0f2fe !important;
       }
       .block-container { padding-top: 1.25rem; }
+      .section-card {
+        background: var(--apec-panel);
+        border: 1px solid var(--apec-line);
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        margin: 8px 0 14px 0;
+      }
+      .metric-card {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        border: 1px solid var(--apec-line);
+        border-top: 4px solid var(--card-accent, var(--apec-blue));
+        border-radius: 8px;
+        padding: 14px 16px;
+        min-height: 112px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      }
+      .metric-card .metric-label {
+        color: var(--apec-muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+        margin-bottom: 8px;
+      }
+      .metric-card .metric-value {
+        color: var(--apec-ink);
+        font-size: 32px;
+        line-height: 1;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+      .metric-card .metric-note {
+        color: var(--apec-muted);
+        font-size: 13px;
+        line-height: 1.25;
+      }
+      .status-badge {
+        display: inline-block;
+        border-radius: 999px;
+        padding: 3px 9px;
+        font-size: 12px;
+        font-weight: 700;
+        background: #e2e8f0;
+        color: #0f172a;
+      }
+      .download-card {
+        background: #ffffff;
+        border: 1px solid var(--apec-line);
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 10px;
+      }
+      .download-card h4 {
+        margin: 0 0 4px 0;
+        color: var(--apec-navy);
+      }
+      .download-card p {
+        margin: 0;
+        color: var(--apec-muted) !important;
+        font-size: 13px;
+      }
+      .walkthrough-step {
+        background: #ffffff;
+        border: 1px solid var(--apec-line);
+        border-left: 4px solid var(--apec-blue);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+        min-height: 116px;
+      }
+      .walkthrough-step .step-number {
+        color: var(--apec-magenta);
+        font-weight: 800;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+      .walkthrough-step .step-title {
+        color: var(--apec-navy);
+        font-weight: 800;
+        font-size: 17px;
+        margin: 4px 0;
+      }
+      .walkthrough-step .step-text {
+        color: var(--apec-muted) !important;
+        font-size: 13px;
+        line-height: 1.32;
+      }
+      .preview-card {
+        background: #ffffff;
+        border: 1px solid var(--apec-line);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 14px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      }
+      .preview-card h3 {
+        margin-top: 0;
+        color: var(--apec-navy);
+      }
+      .trace-chip {
+        display: inline-block;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        border-radius: 999px;
+        padding: 3px 8px;
+        margin: 2px;
+        font-size: 12px;
+        color: #0f172a !important;
+      }
+      .nav-section {
+        margin-top: 14px;
+        padding-top: 10px;
+        border-top: 1px solid #cbd5e1;
+        color: var(--apec-navy) !important;
+        font-size: 12px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+      }
+      .nav-hint {
+        color: #64748b !important;
+        font-size: 12px;
+        margin-top: -4px;
+        margin-bottom: 2px;
+      }
       div[data-testid="stMetric"] {
         background: #ffffff;
         border: 1px solid #d8e0ea;
@@ -178,7 +315,7 @@ st.markdown(
         font-size: 30px;
         line-height: 1.18;
         font-weight: 650;
-        color: #1e3a8a;
+        color: var(--apec-navy);
         margin: 0 0 8px 0;
         letter-spacing: 0;
       }
@@ -202,6 +339,44 @@ st.markdown(
 def _severity_html(severity: str) -> str:
     color = SEVERITY_COLORS.get(severity, "#64748b")
     return f"<span class='risk-pill' style='background:{color}'>{severity.upper()}</span>"
+
+
+def _metric_card(label: str, value: Any, note: str = "", accent: str = "#0ea5e9") -> None:
+    st.markdown(
+        f"""
+        <div class="metric-card" style="--card-accent:{accent}">
+          <div class="metric-label">{html.escape(str(label))}</div>
+          <div class="metric-value">{html.escape(str(value))}</div>
+          <div class="metric-note">{html.escape(str(note))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _status_badge(status: str) -> str:
+    colors = {
+        "open": ("#e2e8f0", "#0f172a"),
+        "planned": ("#dbeafe", "#1e3a8a"),
+        "accepted": ("#fef3c7", "#92400e"),
+        "false_positive": ("#dcfce7", "#166534"),
+        "fixed": ("#d1fae5", "#065f46"),
+        "needs_review": ("#fee2e2", "#991b1b"),
+    }
+    bg, fg = colors.get(status, ("#e2e8f0", "#0f172a"))
+    return f"<span class='status-badge' style='background:{bg};color:{fg}'>{html.escape(status)}</span>"
+
+
+def _section_card(title: str, body: str = "") -> None:
+    st.markdown(
+        f"""
+        <div class="section-card">
+          <h3 style="margin-top:0;color:#07185f;">{html.escape(title)}</h3>
+          <p style="margin-bottom:0;color:#64748b;">{html.escape(body)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _logo_data_uri() -> str:
@@ -455,12 +630,160 @@ def _review_counts(findings: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
+def _render_presentation_walkthrough() -> None:
+    st.subheader("Presentation walkthrough")
+    steps = [
+        ("1", "Load the demo", "Use Demo Mode to run scanner and agents over the bundled sample repository."),
+        ("2", "Show risk posture", "Open Dashboard and explain high risks, total score, review state, and top findings."),
+        ("3", "Explain evidence", "Open Findings, select one finding, and show evidence, playbook, review status, and trace links."),
+        ("4", "Show argumentation", "Open Debate and Agents > Argument graph to show support, attack, and validation moves."),
+        ("5", "Export securely", "Open Report and export HTML/JSON/SARIF or encrypt the report with ML-KEM + AES-GCM."),
+    ]
+    cols = st.columns(5)
+    for col, (number, title, text) in zip(cols, steps):
+        with col:
+            st.markdown(
+                f"""
+                <div class="walkthrough-step">
+                  <div class="step-number">Step {html.escape(number)}</div>
+                  <div class="step-title">{html.escape(title)}</div>
+                  <div class="step-text">{html.escape(text)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def _finding_trace_events(finding: Dict[str, Any], trace: ProofTrace | None) -> List[ProofEvent]:
+    if not trace:
+        return []
+    finding_file = str(finding.get("file") or "")
+    finding_line = finding.get("line_no")
+    algorithm = finding.get("algorithm")
+    finding_type = finding.get("type")
+    seed_ids: Set[str] = set()
+    for event in trace.events:
+        if event.actor != "CryptoDiscoveryAgent":
+            continue
+        metadata = event.metadata
+        same_algorithm = metadata.get("algorithm") == algorithm
+        same_type = metadata.get("type") == finding_type
+        same_line = metadata.get("line") == finding_line
+        same_file = finding_file and finding_file in event.claim
+        if same_algorithm and same_type and (same_line or finding_line is None) and same_file:
+            seed_ids.add(event.id)
+
+    if not seed_ids:
+        for event in trace.events:
+            metadata = event.metadata
+            if metadata.get("algorithm") == algorithm and metadata.get("type") == finding_type:
+                seed_ids.add(event.id)
+                break
+
+    linked_ids = set(seed_ids)
+    changed = True
+    while changed:
+        changed = False
+        for event in trace.events:
+            if set(event.references or []) & linked_ids and event.id not in linked_ids:
+                linked_ids.add(event.id)
+                changed = True
+    return [event for event in trace.events if event.id in linked_ids]
+
+
+def _render_finding_trace_links(finding: Dict[str, Any], trace: ProofTrace | None) -> None:
+    events = _finding_trace_events(finding, trace)
+    st.markdown("**APEC-PS trace links**")
+    if not events:
+        st.info("Run agents to link this finding to proof events and migration claims.")
+        return
+    actors = sorted({event.actor for event in events})
+    kinds = sorted({event.kind for event in events})
+    st.markdown(
+        " ".join(_status_badge(actor) for actor in actors).replace("status-badge", "trace-chip"),
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        _metric_card("Linked events", len(events), "proof events using this finding", "#0ea5e9")
+    with c2:
+        _metric_card("Agents", len(actors), "agents involved", "#b516b5")
+    with c3:
+        _metric_card("Event types", len(kinds), ", ".join(kinds[:3]), "#059669")
+    table = pd.DataFrame(
+        [
+            {
+                "id": event.id,
+                "actor": event.actor,
+                "kind": event.kind,
+                "claim": event.claim,
+                "references": ", ".join(event.references or []),
+            }
+            for event in events
+        ]
+    )
+    st.dataframe(table, use_container_width=True, hide_index=True)
+
+
+def _render_polished_report_preview(findings: List[Dict[str, Any]], trace: ProofTrace | None) -> None:
+    enriched = _attach_operational_metadata(findings)
+    severity = _severity_counts(enriched)
+    reviews = _review_counts(enriched)
+    total_score = sum(int(finding.get("risk_score") or 0) for finding in enriched)
+    trace_events = len(trace.events) if trace else 0
+    st.markdown("<div class='preview-card'><h3>Report Summary</h3></div>", unsafe_allow_html=True)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _metric_card("Findings", len(enriched), "included in report", "#0ea5e9")
+    with c2:
+        _metric_card("High risks", severity["high"], "priority items", "#dc2626")
+    with c3:
+        _metric_card("Risk score", total_score, "aggregate score", "#b516b5")
+    with c4:
+        _metric_card("Proof events", trace_events, "APEC-PS trace", "#059669")
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.markdown("<div class='preview-card'><h3>Top Findings</h3>", unsafe_allow_html=True)
+        top = sorted(enriched, key=lambda item: item.get("risk_score", 0), reverse=True)[:5]
+        for finding in top:
+            st.markdown(
+                f"{_severity_html(str(finding.get('severity', 'low')))} "
+                f"**{finding.get('algorithm')}** · score `{finding.get('risk_score')}` · "
+                f"{finding.get('type')}",
+                unsafe_allow_html=True,
+            )
+            st.caption(str(finding.get("evidence") or finding.get("description") or ""))
+        st.markdown("</div>", unsafe_allow_html=True)
+    with right:
+        st.markdown("<div class='preview-card'><h3>Governance</h3>", unsafe_allow_html=True)
+        if reviews:
+            for status, count in sorted(reviews.items()):
+                st.markdown(f"{_status_badge(status)} `{count}`", unsafe_allow_html=True)
+        else:
+            st.markdown(f"{_status_badge('open')} `{len(enriched)}`", unsafe_allow_html=True)
+        st.markdown("**Export contents**")
+        st.write("Findings, remediation playbooks, human review decisions, proof events, and optional argument graph.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='preview-card'><h3>Remediation Preview</h3>", unsafe_allow_html=True)
+    for finding in enriched[:3]:
+        st.markdown(f"**{finding.get('algorithm')} / {finding.get('type')}**")
+        st.write(finding.get("playbook", {}).get("summary", ""))
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 def _render_dashboard() -> None:
     st.header("Executive dashboard")
+    with st.expander("Guided presentation walkthrough", expanded=False):
+        _render_presentation_walkthrough()
     findings = st.session_state.get("findings", [])
     trace: ProofTrace | None = st.session_state.get("proof_trace")
     if not findings:
-        st.info("No active scan yet. Use Demo Mode or run a repository scan to populate the dashboard.")
+        _section_card(
+            "No active scan",
+            "Use Demo Mode for a one-click presentation scenario, or scan a repository from the Findings page.",
+        )
         scans = _list_scans(limit=5)
         if scans:
             st.subheader("Recent scans")
@@ -480,24 +803,29 @@ def _render_dashboard() -> None:
     readiness = int((closed / len(enriched)) * 100) if enriched else 0
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Findings", len(enriched))
-    c2.metric("High", severity["high"])
-    c3.metric("Risk score", total_score)
-    c4.metric("Unresolved attacks", unresolved_attacks)
-    c5.metric("Readiness", f"{readiness}%")
+    with c1:
+        _metric_card("Findings", len(enriched), "active evidence items", "#0ea5e9")
+    with c2:
+        _metric_card("High", severity["high"], "priority migration risks", "#dc2626")
+    with c3:
+        _metric_card("Risk score", total_score, "aggregate triage score", "#b516b5")
+    with c4:
+        _metric_card("Unresolved", unresolved_attacks, "open argument attacks", "#d97706")
+    with c5:
+        _metric_card("Readiness", f"{readiness}%", "review closure estimate", "#059669")
 
     left, right = st.columns([1, 1])
     with left:
-        st.subheader("Algorithm exposure")
+        _section_card("Algorithm exposure", "Detected cryptographic primitives and settings grouped by algorithm.")
         algo_df = pd.DataFrame(enriched)
         if "algorithm" in algo_df:
             st.bar_chart(algo_df["algorithm"].value_counts())
-        st.subheader("Severity")
+        _section_card("Severity distribution", "How the current scan is prioritized.")
         st.bar_chart(pd.Series(severity))
     with right:
-        st.subheader("Review status")
+        _section_card("Review status", "Human governance state for active findings.")
         st.bar_chart(pd.Series(reviews or {"open": len(enriched)}))
-        st.subheader("Top risks")
+        _section_card("Top risks", "Highest scoring findings for discussion and remediation planning.")
         top = pd.DataFrame(enriched).sort_values("risk_score", ascending=False).head(5)
         st.dataframe(
             top[["severity", "risk_score", "algorithm", "type", "file", "evidence"]],
@@ -510,6 +838,7 @@ def _render_demo_mode() -> None:
     st.header("Demo Mode")
     st.write("Run a complete university-demo scenario with the bundled sample repository.")
     st.caption("This loads the sample repo, scans it, runs all deterministic agents, saves a history snapshot, and prepares the dashboard, debate view, graph, and reports.")
+    _render_presentation_walkthrough()
     sample_path = ROOT / "sample_repo"
     c1, c2, c3 = st.columns(3)
     c1.metric("Demo repository", "sample_repo")
@@ -947,13 +1276,43 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
     finding = next(item for item in filtered if item["finding_id"] == selected_finding_id)
     playbook = finding["playbook"]
     review = finding.get("review", {})
-    left, right = st.columns([1, 1])
-    with left:
-        st.markdown("**Remediation playbook**")
+    st.markdown(
+        f"""
+        <div class="section-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <div>
+              <h3 style="margin:0;color:#07185f;">{html.escape(str(finding.get('algorithm')))} remediation case</h3>
+              <p style="margin:4px 0 0 0;color:#64748b;">{html.escape(str(finding.get('type')))} · {html.escape(str(finding.get('file')))}:{html.escape(str(finding.get('line_no') or '?'))}</p>
+            </div>
+            <div>{_severity_html(str(finding.get('severity', 'low')))} {_status_badge(review.get('status', 'open'))}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    detail_tab, playbook_tab, trace_tab, review_tab = st.tabs(["Finding detail", "Remediation playbook", "Trace links", "Human review"])
+    with detail_tab:
+        d1, d2, d3, d4 = st.columns(4)
+        with d1:
+            _metric_card("Risk score", finding.get("risk_score", "-"), "context-aware score", "#b516b5")
+        with d2:
+            _metric_card("Confidence", finding.get("confidence", "-"), "detection quality", "#0ea5e9")
+        with d3:
+            _metric_card("Impact", finding.get("business_impact", "-"), "business context", "#d97706")
+        with d4:
+            _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", "#059669")
+        st.markdown("**Evidence**")
+        st.code(str(finding.get("evidence") or "No evidence string available."))
+        st.markdown("**Description**")
+        st.write(finding.get("description", ""))
+    with playbook_tab:
+        st.markdown("**Recommended remediation path**")
         st.write(playbook["summary"])
         for idx, step in enumerate(playbook["steps"], start=1):
             st.write(f"{idx}. {step}")
-    with right:
+    with trace_tab:
+        _render_finding_trace_links(finding, st.session_state.get("proof_trace"))
+    with review_tab:
         st.markdown("**Human review decision**")
         status = st.selectbox(
             "Status",
@@ -1782,21 +2141,30 @@ def main() -> None:
     )
 
     with st.sidebar:
-        step = st.radio(
-            "Workflow",
-            ["Dashboard", "Demo Mode", "Repository", "Findings", "Agents", "Debate", "Agentic AI", "History", "Report"],
-            captions=[
-                "Executive summary",
-                "One-click scenario",
-                "Select source",
-                "Scan and review",
-                "Reason over trace",
-                "Argumentation view",
-                "Optional LLM advisor",
-                "Past scans",
-                "Export evidence",
-            ],
-        )
+        st.markdown("### Workflow")
+        nav_sections = [
+            ("OVERVIEW", ["Dashboard", "Demo Mode"], ["Executive summary", "One-click scenario"]),
+            ("INPUT", ["Repository", "Findings"], ["Select source", "Scan and review"]),
+            ("REASONING", ["Agents", "Debate", "Agentic AI"], ["Reason over trace", "Argumentation view", "Optional LLM advisor"]),
+            ("OUTPUT", ["History", "Report"], ["Past scans", "Export evidence"]),
+        ]
+        if "active_page" not in st.session_state:
+            st.session_state.active_page = "Dashboard"
+        for section_title, pages, captions in nav_sections:
+            st.markdown(f"<div class='nav-section'>{section_title}</div>", unsafe_allow_html=True)
+            current_index = pages.index(st.session_state.active_page) if st.session_state.active_page in pages else None
+            selected = st.radio(
+                section_title,
+                pages,
+                captions=captions,
+                index=current_index,
+                key=f"nav_radio_{section_title}",
+                label_visibility="collapsed",
+            )
+            if selected != st.session_state.active_page and selected in pages:
+                st.session_state.active_page = selected
+                st.rerun()
+        step = st.session_state.active_page
         st.text_input("Project name", value=st.session_state.get("project_name", "default-project"), key="project_name_input")
 
     if step == "Dashboard":
@@ -1958,22 +2326,43 @@ def main() -> None:
         sarif_export = _build_sarif_export(findings)
         graph_html = _build_argument_graph_html(trace, layout_mode="Hierarchical", collapse_repeated=True) if trace else None
         html_report = _build_html_report(findings, trace, graph_html)
-        st.download_button("Download Markdown", markdown, file_name="pqc_risk_report.md", mime="text/markdown")
-        st.download_button("Download HTML Report + Graph", html_report, file_name="pqc_risk_report_with_graph.html", mime="text/html")
-        if graph_html:
-            st.download_button("Download Standalone Graph HTML", graph_html, file_name="apecps_argument_graph.html", mime="text/html")
-        else:
-            st.info("Run agents to include the argument graph in HTML exports.")
-        st.download_button("Download JSON", json_export, file_name="pqc_risk_report.json", mime="application/json")
-        st.download_button("Download SARIF", sarif_export, file_name="pqc_risk_report.sarif", mime="application/sarif+json")
-        pdf_bytes = _build_pdf_report(markdown)
-        if pdf_bytes:
-            st.download_button("Download PDF", pdf_bytes, file_name="pqc_risk_report.pdf", mime="application/pdf")
-        else:
-            st.info("PDF export is available when reportlab is installed.")
-        _render_pqc_report_export(html_report, json_export)
-        st.subheader("Preview")
-        st.markdown(markdown)
+        standard_tab, tooling_tab, pqc_tab, preview_tab = st.tabs(
+            ["Standard reports", "Security tooling", "PQC-protected export", "Preview"]
+        )
+        with standard_tab:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown("<div class='download-card'><h4>Markdown</h4><p>Readable report for docs and review.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download Markdown", markdown, file_name="pqc_risk_report.md", mime="text/markdown")
+            with c2:
+                st.markdown("<div class='download-card'><h4>HTML + Graph</h4><p>Complete report with interactive argument graph.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download HTML Report + Graph", html_report, file_name="pqc_risk_report_with_graph.html", mime="text/html")
+            with c3:
+                st.markdown("<div class='download-card'><h4>PDF</h4><p>Printable summary for presentation or archive.</p></div>", unsafe_allow_html=True)
+                pdf_bytes = _build_pdf_report(markdown)
+                if pdf_bytes:
+                    st.download_button("Download PDF", pdf_bytes, file_name="pqc_risk_report.pdf", mime="application/pdf")
+                else:
+                    st.info("PDF export is available when reportlab is installed.")
+            if graph_html:
+                st.markdown("<div class='download-card'><h4>Standalone Graph</h4><p>Interactive APEC-PS argument graph as a separate HTML file.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download Standalone Graph HTML", graph_html, file_name="apecps_argument_graph.html", mime="text/html")
+            else:
+                st.info("Run agents to include the argument graph in HTML exports.")
+        with tooling_tab:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("<div class='download-card'><h4>JSON</h4><p>Structured findings, reviews, playbooks, and proof trace.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download JSON", json_export, file_name="pqc_risk_report.json", mime="application/json")
+            with c2:
+                st.markdown("<div class='download-card'><h4>SARIF</h4><p>Security tooling format for code scanning integrations.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download SARIF", sarif_export, file_name="pqc_risk_report.sarif", mime="application/sarif+json")
+        with pqc_tab:
+            _render_pqc_report_export(html_report, json_export)
+        with preview_tab:
+            _render_polished_report_preview(findings, trace)
+            with st.expander("Raw Markdown report"):
+                st.markdown(markdown)
 
 
 if __name__ == "__main__":
