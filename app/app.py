@@ -5,11 +5,14 @@ from __future__ import annotations
 import io
 import base64
 import hashlib
+import html
 import json
 import os
 import sqlite3
 import sys
 import tempfile
+import urllib.error
+import urllib.request
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -426,6 +429,320 @@ def _append_review_event(trace: ProofTrace, finding: Dict[str, Any], review: Dic
             expires_on=review.get("expires_on"),
         )
     )
+
+
+def _run_agent_pipeline(findings: List[Dict[str, Any]], agents: List[Any] | None = None) -> ProofTrace:
+    trace = ProofTrace()
+    for agent in agents or ALL_AGENTS:
+        agent.evaluate(findings, trace)
+    return trace
+
+
+def _severity_counts(findings: List[Dict[str, Any]]) -> Dict[str, int]:
+    return {
+        "high": sum(1 for finding in findings if finding.get("severity") == "high"),
+        "medium": sum(1 for finding in findings if finding.get("severity") == "medium"),
+        "low": sum(1 for finding in findings if finding.get("severity") == "low"),
+    }
+
+
+def _review_counts(findings: List[Dict[str, Any]]) -> Dict[str, int]:
+    enriched = _attach_operational_metadata(findings)
+    counts: Dict[str, int] = {}
+    for finding in enriched:
+        status = finding.get("review", {}).get("status", "open")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def _render_dashboard() -> None:
+    st.header("Executive dashboard")
+    findings = st.session_state.get("findings", [])
+    trace: ProofTrace | None = st.session_state.get("proof_trace")
+    if not findings:
+        st.info("No active scan yet. Use Demo Mode or run a repository scan to populate the dashboard.")
+        scans = _list_scans(limit=5)
+        if scans:
+            st.subheader("Recent scans")
+            st.dataframe(pd.DataFrame(scans), use_container_width=True, hide_index=True)
+        return
+
+    enriched = _attach_operational_metadata(findings)
+    severity = _severity_counts(enriched)
+    reviews = _review_counts(enriched)
+    total_score = sum(int(finding.get("risk_score") or 0) for finding in enriched)
+    unresolved_attacks = 0
+    if trace:
+        attacked_ids = {ref for event in trace.events if event.kind == "attack" for ref in (event.references or [])}
+        resolved_ids = {ref for event in trace.events if event.kind == "validation" for ref in (event.references or [])}
+        unresolved_attacks = len(attacked_ids - resolved_ids)
+    closed = reviews.get("fixed", 0) + reviews.get("false_positive", 0)
+    readiness = int((closed / len(enriched)) * 100) if enriched else 0
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Findings", len(enriched))
+    c2.metric("High", severity["high"])
+    c3.metric("Risk score", total_score)
+    c4.metric("Unresolved attacks", unresolved_attacks)
+    c5.metric("Readiness", f"{readiness}%")
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.subheader("Algorithm exposure")
+        algo_df = pd.DataFrame(enriched)
+        if "algorithm" in algo_df:
+            st.bar_chart(algo_df["algorithm"].value_counts())
+        st.subheader("Severity")
+        st.bar_chart(pd.Series(severity))
+    with right:
+        st.subheader("Review status")
+        st.bar_chart(pd.Series(reviews or {"open": len(enriched)}))
+        st.subheader("Top risks")
+        top = pd.DataFrame(enriched).sort_values("risk_score", ascending=False).head(5)
+        st.dataframe(
+            top[["severity", "risk_score", "algorithm", "type", "file", "evidence"]],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+def _render_demo_mode() -> None:
+    st.header("Demo Mode")
+    st.write("Run a complete university-demo scenario with the bundled sample repository.")
+    st.caption("This loads the sample repo, scans it, runs all deterministic agents, saves a history snapshot, and prepares the dashboard, debate view, graph, and reports.")
+    sample_path = ROOT / "sample_repo"
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Demo repository", "sample_repo")
+    c2.metric("Agents", len(ALL_AGENTS))
+    c3.metric("Output", "Findings + Trace")
+    if st.button("Load Demo Scenario", type="primary"):
+        with st.spinner("Running demo scan and agent pipeline"):
+            findings = scan_repository(str(sample_path), max_workers=4)
+            trace = _run_agent_pipeline(findings)
+            st.session_state.repo_path = str(sample_path)
+            st.session_state.findings = findings
+            st.session_state.proof_trace = trace
+            st.session_state.project_name = "university-demo"
+            scan_id = _save_scan("university-demo", f"demo:{sample_path}", findings, trace)
+            st.session_state.last_scan_id = scan_id
+        st.success(f"Demo scenario ready: {len(findings)} findings and {len(trace.events)} proof events.")
+    if st.session_state.get("findings"):
+        _render_dashboard()
+
+
+def _render_debate_view(trace: ProofTrace | None) -> None:
+    st.header("Agent Debate View")
+    if not trace:
+        st.info("Run the agent pipeline first. Demo Mode can create a complete trace automatically.")
+        return
+
+    events = trace.events
+    supports = [event for event in events if event.kind == "support"]
+    attacks = [event for event in events if event.kind == "attack"]
+    warrants = [event for event in events if event.kind == "warrant"]
+    claims = [event for event in events if event.kind == "claim"]
+    validations = [event for event in events if event.kind == "validation"]
+    attacked_ids = {ref for event in attacks for ref in (event.references or [])}
+    validated_ids = {ref for event in validations for ref in (event.references or [])}
+    unresolved = attacked_ids - validated_ids
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Support arguments", len(supports))
+    c2.metric("Attack arguments", len(attacks))
+    c3.metric("Warrants", len(warrants))
+    c4.metric("Unresolved challenges", len(unresolved))
+
+    left, middle, right = st.columns(3)
+    with left:
+        st.subheader("Support")
+        for event in supports[:12]:
+            with st.expander(f"{event.actor} -> {event.metadata.get('severity', '-')}", expanded=False):
+                st.write(event.claim)
+                st.caption(f"References: {', '.join(event.references or []) or '-'}")
+    with middle:
+        st.subheader("Attack / Critique")
+        for event in attacks[:12]:
+            with st.expander(f"{event.actor} -> {event.metadata.get('type', event.kind)}", expanded=False):
+                st.write(event.claim)
+                st.caption(f"Challenges: {', '.join(event.references or []) or '-'}")
+    with right:
+        st.subheader("Resolution")
+        for event in claims + validations:
+            status = event.metadata.get("status", event.kind)
+            with st.expander(f"{event.actor} -> {status}", expanded=False):
+                st.write(event.claim)
+                st.caption(f"References: {', '.join(event.references or []) or '-'}")
+
+    if unresolved:
+        st.warning("Some claims or supports are still challenged. Inspect the argument graph for the unresolved red-bordered nodes.")
+        st.dataframe(
+            pd.DataFrame(
+                [
+                    {
+                        "event_id": event_id,
+                        "actor": next((event.actor for event in events if event.id == event_id), "-"),
+                        "claim": next((event.claim for event in events if event.id == event_id), "-"),
+                    }
+                    for event_id in unresolved
+                ]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+
+def _run_llm_agentic_analysis(findings: List[Dict[str, Any]], trace: ProofTrace | None, api_key: str, model: str) -> str:
+    from openai import OpenAI
+
+    compact_findings = [
+        {
+            "algorithm": finding.get("algorithm"),
+            "type": finding.get("type"),
+            "severity": finding.get("severity"),
+            "risk_score": finding.get("risk_score"),
+            "evidence": finding.get("evidence"),
+            "review": finding.get("review", {}),
+        }
+        for finding in _attach_operational_metadata(findings)[:20]
+    ]
+    compact_trace = [
+        {
+            "actor": event.actor,
+            "kind": event.kind,
+            "claim": event.claim,
+            "metadata": event.metadata,
+        }
+        for event in (trace.events if trace else [])[-20:]
+    ]
+    prompt = {
+        "task": "Act as an LLM-backed agentic advisor for a PQC risk triage tool. Produce a concise, actionable analysis.",
+        "requirements": [
+            "Summarize the highest-priority risk.",
+            "Challenge any unrealistic migration assumptions.",
+            "Recommend next human decision points.",
+            "Suggest one remediation sequence.",
+            "Do not claim that changes were executed.",
+        ],
+        "findings": compact_findings,
+        "recent_proof_events": compact_trace,
+    }
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a careful security architecture agent. Be precise, auditable, and concise."},
+            {"role": "user", "content": json.dumps(prompt, indent=2)},
+        ],
+        temperature=0.2,
+    )
+    return response.choices[0].message.content or ""
+
+
+def _agentic_prompt_payload(findings: List[Dict[str, Any]], trace: ProofTrace | None) -> Dict[str, Any]:
+    compact_findings = [
+        {
+            "algorithm": finding.get("algorithm"),
+            "type": finding.get("type"),
+            "severity": finding.get("severity"),
+            "risk_score": finding.get("risk_score"),
+            "evidence": finding.get("evidence"),
+            "review": finding.get("review", {}),
+        }
+        for finding in _attach_operational_metadata(findings)[:20]
+    ]
+    compact_trace = [
+        {
+            "actor": event.actor,
+            "kind": event.kind,
+            "claim": event.claim,
+            "metadata": event.metadata,
+        }
+        for event in (trace.events if trace else [])[-20:]
+    ]
+    return {
+        "task": "Act as an LLM-backed agentic advisor for a PQC risk triage tool. Produce a concise, actionable analysis.",
+        "requirements": [
+            "Summarize the highest-priority risk.",
+            "Challenge any unrealistic migration assumptions.",
+            "Recommend next human decision points.",
+            "Suggest one remediation sequence.",
+            "Do not claim that changes were executed.",
+        ],
+        "findings": compact_findings,
+        "recent_proof_events": compact_trace,
+    }
+
+
+def _run_ollama_agentic_analysis(findings: List[Dict[str, Any]], trace: ProofTrace | None, base_url: str, model: str) -> str:
+    prompt = (
+        "You are a careful security architecture agent. Be precise, auditable, and concise.\n\n"
+        + json.dumps(_agentic_prompt_payload(findings, trace), indent=2)
+    )
+    endpoint = base_url.rstrip("/") + "/api/generate"
+    payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+    request = urllib.request.Request(endpoint, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=120) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Could not reach Ollama at {endpoint}. Start Ollama and pull the selected model first.") from exc
+    return data.get("response", "")
+
+
+def _render_agentic_ai_upgrade() -> None:
+    st.header("Real Agentic AI Upgrade")
+    st.write("This optional layer calls an LLM as an advisor agent and can append its analysis to the APEC-PS proof trace.")
+    findings = st.session_state.get("findings", [])
+    trace: ProofTrace | None = st.session_state.get("proof_trace")
+    if not findings:
+        st.info("Run Demo Mode or a scan first so the LLM agent has evidence to analyze.")
+        return
+
+    env_key = os.environ.get("OPENAI_API_KEY", "")
+    provider = st.selectbox("LLM provider", ["OpenAI API", "Local Ollama"])
+    if provider == "OpenAI API":
+        api_key = st.text_input("OpenAI API key", value="", type="password", help="Leave empty to use OPENAI_API_KEY from the environment.")
+        model = st.text_input("Model", value=os.environ.get("OPENAI_MODEL", "gpt-4o-mini"))
+    else:
+        st.info("Local Ollama does not require OpenAI billing. Install Ollama, run `ollama pull llama3.2`, and keep Ollama running locally.")
+        api_key = ""
+        model = st.text_input("Ollama model", value=os.environ.get("OLLAMA_MODEL", "llama3.2"))
+        ollama_url = st.text_input("Ollama URL", value=os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434"))
+    append_to_trace = st.checkbox("Append LLM advisor output as proof event", value=True)
+    if st.button("Run LLM Advisor Agent", type="primary"):
+        try:
+            with st.spinner("Calling LLM advisor agent"):
+                if provider == "OpenAI API":
+                    key = api_key.strip() or env_key
+                    if not key:
+                        st.warning("Add an API key or set OPENAI_API_KEY to run the OpenAI-backed agent.")
+                        return
+                    analysis = _run_llm_agentic_analysis(findings, trace, key, model.strip())
+                else:
+                    analysis = _run_ollama_agentic_analysis(findings, trace, ollama_url.strip(), model.strip())
+            st.session_state.llm_agentic_analysis = analysis
+            if append_to_trace:
+                if not trace:
+                    trace = ProofTrace()
+                    st.session_state.proof_trace = trace
+                trace.add_event(
+                    create_event(
+                        actor="LLMAdvisorAgent",
+                        kind="warrant",
+                        claim=analysis,
+                        references=[event.id for event in trace.events[-5:]],
+                        model=model.strip(),
+                        provider=provider,
+                        status="llm_generated_requires_human_review",
+                    )
+                )
+            st.success("LLM advisor analysis generated.")
+        except Exception as exc:
+            st.error(f"LLM advisor failed: {exc}")
+
+    if st.session_state.get("llm_agentic_analysis"):
+        st.subheader("LLM Advisor Output")
+        st.write(st.session_state.llm_agentic_analysis)
 
 
 def _flatten_events(trace: ProofTrace) -> List[Dict[str, Any]]:
@@ -907,6 +1224,343 @@ def _inject_graph_click_inspector(html: str, node_details: Dict[str, Dict[str, A
     return html.replace("</body>", panel + "</body>")
 
 
+def _build_argument_graph_html(
+    trace: ProofTrace,
+    layout_mode: str = "Hierarchical",
+    collapse_repeated: bool = True,
+    height: int = 760,
+) -> str | None:
+    try:
+        from pyvis.network import Network
+    except Exception:
+        return None
+
+    projected_nodes, projected_edges, _ = _build_graph_projection(trace, collapse_repeated)
+    events_by_id = {event.id: event for event in trace.events}
+    attacked_ids = {ref for event in trace.events if event.kind == "attack" for ref in (event.references or [])}
+    unresolved_projected_ids = set(attacked_ids)
+    projected_by_id = {node["id"]: node for node in projected_nodes}
+
+    net = Network(height=f"{height}px", width="100%", directed=True, bgcolor="#ffffff", font_color="#0f172a")
+    if layout_mode == "Hierarchical":
+        net.toggle_physics(False)
+        net.set_options(
+            """
+            {
+              "layout": {"hierarchical": {"enabled": true, "direction": "LR", "sortMethod": "directed", "levelSeparation": 220, "nodeSpacing": 160}},
+              "physics": {"enabled": false},
+              "edges": {"smooth": {"type": "cubicBezier", "forceDirection": "horizontal"}}
+            }
+            """
+        )
+    elif layout_mode == "Timeline":
+        net.toggle_physics(False)
+    else:
+        net.toggle_physics(True)
+        net.set_options("""{"physics": {"stabilization": true}, "edges": {"smooth": true}}""")
+
+    kind_rows = {"premise": 0, "support": 1, "warrant": 2, "attack": 3, "claim": 4, "validation": 5}
+    for idx, node in enumerate(projected_nodes):
+        metadata = node["metadata"]
+        severity = metadata.get("severity")
+        kind = node["kind"]
+        color = SEVERITY_COLORS.get(str(severity), KIND_COLORS.get(kind, "#64748b"))
+        is_unresolved = node["id"] in unresolved_projected_ids and kind in {"claim", "support", "warrant"}
+        border = "#b91c1c" if is_unresolved else KIND_COLORS.get(kind, "#64748b")
+        title = f"{node['actor']}<br>{kind}<br>{node['claim']}"
+        if severity:
+            title += f"<br>Severity: {severity}"
+        if metadata.get("risk_score") is not None:
+            title += f"<br>Risk score: {metadata.get('risk_score')}"
+        if node["grouped"]:
+            title += f"<br>Grouped events: {node['count']}"
+        label = f"{node['actor']}\n{kind}"
+        if node["grouped"]:
+            label = f"{node['count']} findings\n{metadata.get('algorithm')}"
+        x = idx * 180 if layout_mode == "Timeline" else None
+        y = kind_rows.get(kind, 2) * 95 if layout_mode == "Timeline" else None
+        net.add_node(
+            node["id"],
+            label=label,
+            title=title,
+            color={"background": color, "border": border, "highlight": {"background": "#fef3c7", "border": "#f59e0b"}},
+            shape="box",
+            margin=8,
+            borderWidth=5 if is_unresolved else 1,
+            x=x,
+            y=y,
+            fixed=layout_mode == "Timeline",
+        )
+
+    for edge in projected_edges:
+        edge_kind = edge["kind"]
+        edge_color = "#dc2626" if edge_kind == "attack" else "#16a34a" if edge_kind == "support" else "#94a3b8"
+        net.add_edge(
+            edge["from"],
+            edge["to"],
+            color=edge_color,
+            label=edge_kind,
+            title=f"{edge_kind}: {edge['from']} -> {edge['to']}",
+            arrows="to",
+            font={"align": "middle", "size": 11, "color": "#334155"},
+        )
+
+    node_details = {
+        node_id: {
+            "id": node_id,
+            "event_ids": node["event_ids"],
+            "actor": node["actor"],
+            "kind": node["kind"],
+            "claim": node["claim"],
+            "severity": node["metadata"].get("severity"),
+            "risk_score": node["metadata"].get("risk_score"),
+            "metadata": node["metadata"],
+            "count": node["count"],
+            "grouped": node["grouped"],
+        }
+        for node_id, node in projected_by_id.items()
+    }
+    return _inject_graph_click_inspector(net.generate_html(notebook=False), node_details)
+
+
+def _build_html_report(findings: List[Dict[str, Any]], trace: ProofTrace | None, graph_html: str | None) -> str:
+    enriched = _attach_operational_metadata(findings)
+    rows = []
+    for finding in enriched:
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(str(finding.get('severity', '')))}</td>"
+            f"<td>{html.escape(str(finding.get('risk_score', '')))}</td>"
+            f"<td>{html.escape(str(finding.get('review', {}).get('status', 'open')))}</td>"
+            f"<td>{html.escape(str(finding.get('algorithm', '')))}</td>"
+            f"<td>{html.escape(str(finding.get('type', '')))}</td>"
+            f"<td>{html.escape(str(finding.get('file', '')))}:{html.escape(str(finding.get('line_no') or '?'))}</td>"
+            f"<td>{html.escape(str(finding.get('evidence') or ''))}</td>"
+            "</tr>"
+        )
+    playbooks = []
+    for finding in enriched:
+        steps = "".join(f"<li>{html.escape(str(step))}</li>" for step in finding.get("playbook", {}).get("steps", []))
+        playbooks.append(
+            "<section class='card'>"
+            f"<h3>{html.escape(str(finding.get('algorithm')))} - {html.escape(str(finding.get('type')))}</h3>"
+            f"<p><b>Finding ID:</b> {html.escape(str(finding.get('finding_id')))}</p>"
+            f"<p>{html.escape(str(finding.get('playbook', {}).get('summary', '')))}</p>"
+            f"<ol>{steps}</ol>"
+            "</section>"
+        )
+    events = ""
+    if trace:
+        events = "".join(
+            "<li>"
+            f"<b>{html.escape(event.actor)} / {html.escape(event.kind)}</b>: {html.escape(event.claim)}"
+            f"<br><small>refs: {html.escape(', '.join(event.references or []) or '-')}</small>"
+            "</li>"
+            for event in trace.events
+        )
+    graph_section = graph_html or "<p>Argument graph unavailable. Install pyvis and run agents before exporting.</p>"
+    return f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>APEC-PS PQC Risk Report</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 32px; color: #0f172a; background: #f8fafc; }}
+    h1 {{ margin-bottom: 4px; }}
+    h2 {{ margin-top: 32px; border-bottom: 1px solid #cbd5e1; padding-bottom: 6px; }}
+    table {{ border-collapse: collapse; width: 100%; background: #fff; }}
+    th, td {{ border: 1px solid #cbd5e1; padding: 8px; vertical-align: top; font-size: 13px; }}
+    th {{ background: #e2e8f0; text-align: left; }}
+    .card {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px; margin: 12px 0; }}
+    .graph-frame {{ background: #fff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px; }}
+  </style>
+</head>
+<body>
+  <h1>APEC-PS</h1>
+  <p><b>Argumentation for Trustworthy Agentic AI</b></p>
+  <p>Post-Quantum Cryptography Risk Triage</p>
+  <p><small>Generated at {html.escape(datetime.now(timezone.utc).isoformat())}</small></p>
+
+  <h2>Findings</h2>
+  <table>
+    <thead><tr><th>Severity</th><th>Score</th><th>Status</th><th>Algorithm</th><th>Type</th><th>Location</th><th>Evidence</th></tr></thead>
+    <tbody>{''.join(rows)}</tbody>
+  </table>
+
+  <h2>Argument Graph</h2>
+  <div class="graph-frame">{graph_section}</div>
+
+  <h2>Remediation Playbooks</h2>
+  {''.join(playbooks)}
+
+  <h2>Proof Events</h2>
+  <ul>{events}</ul>
+</body>
+</html>"""
+
+
+def _load_ml_kem_768():
+    try:
+        from pqcrypto.kem import ml_kem_768
+
+        return ml_kem_768
+    except Exception as exc:
+        raise RuntimeError("PQC export requires the `pqcrypto` package with ML-KEM-768 support.") from exc
+
+
+def _b64encode(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
+
+
+def _b64decode(value: str) -> bytes:
+    return base64.b64decode(value.encode("ascii"))
+
+
+def _derive_report_key(shared_secret: bytes, associated_data: bytes) -> bytes:
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b"APEC-PS PQC report export|" + associated_data,
+    ).derive(shared_secret)
+
+
+def _generate_pqc_recipient_keypair() -> Dict[str, str]:
+    kem = _load_ml_kem_768()
+    public_key, secret_key = kem.generate_keypair()
+    return {
+        "algorithm": "ML-KEM-768",
+        "public_key": _b64encode(public_key),
+        "secret_key": _b64encode(secret_key),
+        "public_key_fingerprint": hashlib.sha256(public_key).hexdigest()[:24],
+    }
+
+
+def _encrypt_report_with_ml_kem(plaintext: bytes, public_key_b64: str, plaintext_format: str) -> str:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    kem = _load_ml_kem_768()
+    public_key = _b64decode(public_key_b64.strip())
+    kem_ciphertext, shared_secret = kem.encrypt(public_key)
+    associated_data = json.dumps(
+        {
+            "schema": "apec-ps-pqc-encrypted-report/v1",
+            "kem": "ML-KEM-768",
+            "kdf": "HKDF-SHA256",
+            "cipher": "AES-256-GCM",
+            "plaintext_format": plaintext_format,
+        },
+        sort_keys=True,
+    ).encode("utf-8")
+    aes_key = _derive_report_key(shared_secret, associated_data)
+    nonce = os.urandom(12)
+    ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, associated_data)
+    package = {
+        "schema": "apec-ps-pqc-encrypted-report/v1",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "kem": "ML-KEM-768",
+        "kdf": "HKDF-SHA256",
+        "cipher": "AES-256-GCM",
+        "public_key_fingerprint": hashlib.sha256(public_key).hexdigest()[:24],
+        "plaintext_format": plaintext_format,
+        "associated_data": _b64encode(associated_data),
+        "kem_ciphertext": _b64encode(kem_ciphertext),
+        "nonce": _b64encode(nonce),
+        "ciphertext": _b64encode(ciphertext),
+    }
+    return json.dumps(package, indent=2, sort_keys=True)
+
+
+def _decrypt_report_with_ml_kem(package_json: str, secret_key_b64: str) -> bytes:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    kem = _load_ml_kem_768()
+    package = json.loads(package_json)
+    shared_secret = kem.decrypt(_b64decode(secret_key_b64.strip()), _b64decode(package["kem_ciphertext"]))
+    associated_data = _b64decode(package["associated_data"])
+    aes_key = _derive_report_key(shared_secret, associated_data)
+    return AESGCM(aes_key).decrypt(_b64decode(package["nonce"]), _b64decode(package["ciphertext"]), associated_data)
+
+
+def _render_pqc_report_export(html_report: str, json_export: str) -> None:
+    st.subheader("PQC-Protected Report Export")
+    st.write("Encrypt the generated report for a recipient using ML-KEM-768 to establish key material and AES-256-GCM for the report payload.")
+    st.caption("For a real workflow, the recipient generates the key pair and shares only the public key. The private key should not be uploaded or shared.")
+
+    try:
+        _load_ml_kem_768()
+    except Exception as exc:
+        st.warning(str(exc))
+        st.code("python -m pip install pqcrypto", language="powershell")
+        return
+
+    if st.button("Generate demo ML-KEM recipient keypair"):
+        st.session_state.pqc_recipient_keypair = _generate_pqc_recipient_keypair()
+
+    keypair = st.session_state.get("pqc_recipient_keypair")
+    if keypair:
+        c1, c2 = st.columns(2)
+        c1.metric("KEM", keypair["algorithm"])
+        c2.metric("Public key fingerprint", keypair["public_key_fingerprint"])
+        st.download_button(
+            "Download recipient public key",
+            keypair["public_key"],
+            file_name="apecps_ml_kem_768_public_key.b64",
+            mime="text/plain",
+        )
+        st.download_button(
+            "Download demo recipient private key",
+            keypair["secret_key"],
+            file_name="apecps_ml_kem_768_private_key_KEEP_SECRET.b64",
+            mime="text/plain",
+        )
+
+    public_key = st.text_area(
+        "Recipient ML-KEM-768 public key",
+        value=keypair["public_key"] if keypair else "",
+        height=120,
+        help="Paste a base64 ML-KEM-768 public key. For demos, generate one above.",
+    )
+    report_format = st.selectbox("Plaintext report to encrypt", ["HTML report", "JSON report"])
+    plaintext = html_report.encode("utf-8") if report_format == "HTML report" else json_export.encode("utf-8")
+    plaintext_format = "text/html" if report_format == "HTML report" else "application/json"
+    if st.button("Encrypt report with ML-KEM + AES-256-GCM", type="primary"):
+        if not public_key.strip():
+            st.warning("Generate or paste a recipient public key first.")
+        else:
+            try:
+                encrypted = _encrypt_report_with_ml_kem(plaintext, public_key, plaintext_format)
+                st.session_state.pqc_encrypted_report = encrypted
+                st.success("Report encrypted with ML-KEM-768 + HKDF-SHA256 + AES-256-GCM.")
+            except Exception as exc:
+                st.error(f"PQC encryption failed: {exc}")
+
+    if st.session_state.get("pqc_encrypted_report"):
+        st.download_button(
+            "Download PQC-encrypted report package",
+            st.session_state.pqc_encrypted_report,
+            file_name="apecps_pqc_encrypted_report.json",
+            mime="application/json",
+        )
+
+    with st.expander("Decrypt package locally for verification"):
+        package_json = st.text_area("Encrypted package JSON", value=st.session_state.get("pqc_encrypted_report", ""), height=140)
+        secret_key = st.text_area("Recipient private key", value=keypair["secret_key"] if keypair else "", height=120)
+        if st.button("Decrypt package"):
+            if not package_json.strip() or not secret_key.strip():
+                st.warning("Package JSON and private key are required.")
+            else:
+                try:
+                    decrypted = _decrypt_report_with_ml_kem(package_json, secret_key)
+                    st.success("Decryption succeeded.")
+                    st.download_button("Download decrypted report", decrypted, file_name="decrypted_apecps_report.html", mime="text/html")
+                except Exception as exc:
+                    st.error(f"Decryption failed: {exc}")
+
+
 def _render_graph(trace: ProofTrace) -> None:
     try:
         from pyvis.network import Network
@@ -1130,12 +1784,28 @@ def main() -> None:
     with st.sidebar:
         step = st.radio(
             "Workflow",
-            ["Repository", "Findings", "Agents", "History", "Report"],
-            captions=["Select source", "Scan and review", "Reason over trace", "Past scans", "Export evidence"],
+            ["Dashboard", "Demo Mode", "Repository", "Findings", "Agents", "Debate", "Agentic AI", "History", "Report"],
+            captions=[
+                "Executive summary",
+                "One-click scenario",
+                "Select source",
+                "Scan and review",
+                "Reason over trace",
+                "Argumentation view",
+                "Optional LLM advisor",
+                "Past scans",
+                "Export evidence",
+            ],
         )
         st.text_input("Project name", value=st.session_state.get("project_name", "default-project"), key="project_name_input")
 
-    if step == "Repository":
+    if step == "Dashboard":
+        _render_dashboard()
+
+    elif step == "Demo Mode":
+        _render_demo_mode()
+
+    elif step == "Repository":
         st.header("Repository")
         repo_path = st.text_input(
             "Path accessible to this app",
@@ -1244,6 +1914,12 @@ def main() -> None:
             with tab_graph:
                 _render_graph(trace)
 
+    elif step == "Debate":
+        _render_debate_view(st.session_state.get("proof_trace"))
+
+    elif step == "Agentic AI":
+        _render_agentic_ai_upgrade()
+
     elif step == "History":
         st.header("Persistent scan history")
         scans = _list_scans(limit=50)
@@ -1280,7 +1956,14 @@ def main() -> None:
         markdown = _build_markdown_report(findings, trace)
         json_export = _build_json_export(findings, trace)
         sarif_export = _build_sarif_export(findings)
+        graph_html = _build_argument_graph_html(trace, layout_mode="Hierarchical", collapse_repeated=True) if trace else None
+        html_report = _build_html_report(findings, trace, graph_html)
         st.download_button("Download Markdown", markdown, file_name="pqc_risk_report.md", mime="text/markdown")
+        st.download_button("Download HTML Report + Graph", html_report, file_name="pqc_risk_report_with_graph.html", mime="text/html")
+        if graph_html:
+            st.download_button("Download Standalone Graph HTML", graph_html, file_name="apecps_argument_graph.html", mime="text/html")
+        else:
+            st.info("Run agents to include the argument graph in HTML exports.")
         st.download_button("Download JSON", json_export, file_name="pqc_risk_report.json", mime="application/json")
         st.download_button("Download SARIF", sarif_export, file_name="pqc_risk_report.sarif", mime="application/sarif+json")
         pdf_bytes = _build_pdf_report(markdown)
@@ -1288,6 +1971,7 @@ def main() -> None:
             st.download_button("Download PDF", pdf_bytes, file_name="pqc_risk_report.pdf", mime="application/pdf")
         else:
             st.info("PDF export is available when reportlab is installed.")
+        _render_pqc_report_export(html_report, json_export)
         st.subheader("Preview")
         st.markdown(markdown)
 

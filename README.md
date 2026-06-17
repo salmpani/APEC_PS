@@ -1,4 +1,4 @@
-# APEC-PS: Argumentation for Trustworthy Agentic AI - PQC Prototype
+# Improved APEC-PS PQC Prototype
 
 This repository contains a research prototype for post-quantum cryptography
 (PQC) risk triage and multi-agent reasoning using an APEC-PS style proof trace.
@@ -26,6 +26,12 @@ remediation plan is considered executable.
   color-coded argument graph, and Markdown/PDF/JSON/SARIF report export.
 - Live TLS endpoint scanning for certificate public keys, certificate
   signatures, negotiated TLS versions, and cipher-suite indicators.
+- Demo Mode for one-click university presentations.
+- Executive dashboard for risk posture, review status, top risks, and trace
+  health.
+- Agent Debate View to explain support, attack, warrant, and validation moves.
+- Optional LLM-backed advisor agent with either OpenAI API or local Ollama.
+- PQC-protected report export using ML-KEM-768, HKDF-SHA256, and AES-256-GCM.
 
 ## Run the app
 
@@ -37,6 +43,20 @@ streamlit run app/app.py
 The default UI path points to `sample_repo`, so you can scan immediately.
 Use the `Findings` page to scan local repositories and optional live TLS
 endpoints such as `example.com` or `api.example.com:8443`.
+
+For presentations, open `Demo Mode` and click `Load Demo Scenario` to run the
+sample repository scan and agent pipeline automatically.
+
+To use the LLM advisor without OpenAI billing, run a local Ollama model and
+choose `Local Ollama` in the `Agentic AI` page. Example:
+
+```bash
+ollama pull llama3.2
+```
+
+The `Report` page can encrypt HTML or JSON reports for a recipient using
+ML-KEM-768 to establish key material and AES-256-GCM to protect the report
+payload.
 
 ## Deploy for a university demo
 

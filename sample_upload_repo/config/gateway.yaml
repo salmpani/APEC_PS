@@ -1,0 +1,12 @@
+service: partner-gateway
+environment: staging
+data_classification: customer_identity_data
+retention_years: 12
+tls_key_exchange: ECDHE-RSA
+certificate_signature: ECDSA
+allowed_protocols:
+  - TLSv1.1
+  - TLSv1.2
+owners:
+  security: security-team@example.edu
+  application: platform-team@example.edu
