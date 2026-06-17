@@ -1,4 +1,4 @@
-# Improved APEC-PS PQC Prototype
+# APEC-PS: Argumentation for Trustworthy Agentic AI - PQC Prototype
 
 This repository contains a research prototype for post-quantum cryptography
 (PQC) risk triage and multi-agent reasoning using an APEC-PS style proof trace.
