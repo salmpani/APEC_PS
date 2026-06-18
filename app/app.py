@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Set, Tuple
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -53,6 +54,21 @@ APP_TAGLINE = "Argumentation for Trustworthy Agentic AI"
 APP_SUBTITLE = "Post-Quantum Cryptography Risk Triage"
 LOGO_PATH = ROOT / "assets" / "apec-ps-logo.png"
 DB_PATH = ROOT / "apecps_history.db"
+PROJECT_AUTHOR = "Sofia Almpani"
+PROJECT_AFFILIATION = "School of Applied Mathematical and Physical Sciences, National Technical University of Athens, Greece"
+PROJECT_EMAIL = "s.almpani@gmail.com"
+PROJECT_DEMO_URL = "https://apec-ps.streamlit.app/"
+PROJECT_SOURCE_URL = "https://github.com/salmpani/APEC_PS"
+PROJECT_YEAR = "2026"
+PROJECT_RIGHTS = "Copyright (c) 2026 Sofia Almpani. All rights reserved unless explicitly licensed otherwise."
+PROJECT_USAGE = "Academic demonstration and research prototype. Not certified for production security use."
+PROJECT_CITATION = f"Sofia Almpani, APEC-PS: Argumentation for Trustworthy Agentic AI - Post-Quantum Cryptography Risk Triage, 2026. Source code: {PROJECT_SOURCE_URL}. Live demo: {PROJECT_DEMO_URL}"
+NAV_SECTIONS = [
+    ("OVERVIEW", ["Dashboard", "Demo Mode", "About"], ["Executive summary", "One-click scenario", "Author and rights"]),
+    ("INPUT", ["Repository", "Findings"], ["Select source", "Scan and review"]),
+    ("REASONING", ["Agents", "Debate", "Agentic AI"], ["Reason over trace", "Argumentation view", "Optional LLM advisor"]),
+    ("OUTPUT", ["History", "Report"], ["Past scans", "Export evidence"]),
+]
 
 st.set_page_config(page_title=f"{APP_TITLE} - {APP_SUBTITLE}", layout="wide")
 st.markdown(
@@ -379,6 +395,16 @@ def _section_card(title: str, body: str = "") -> None:
     )
 
 
+def _set_active_nav(section_title: str) -> None:
+    page = st.session_state.get(f"nav_radio_{section_title}")
+    if not page:
+        return
+    st.session_state.active_page = page
+    for other_title, _, _ in NAV_SECTIONS:
+        if other_title != section_title:
+            st.session_state[f"nav_radio_{other_title}"] = None
+
+
 def _logo_data_uri() -> str:
     if not LOGO_PATH.exists():
         return ""
@@ -654,6 +680,44 @@ def _render_presentation_walkthrough() -> None:
             )
 
 
+def _render_about_page() -> None:
+    st.header("About this project")
+    left, right = st.columns([1.2, 1])
+    with left:
+        _section_card(
+            "Project identity",
+            "APEC-PS applies argumentation-based proof traces to trustworthy agentic AI for post-quantum cryptography risk triage.",
+        )
+        st.markdown(
+            f"""
+            <div class="section-card">
+              <h3 style="margin-top:0;color:#07185f;">Author</h3>
+              <p><b>Name:</b> {html.escape(PROJECT_AUTHOR)}</p>
+              <p><b>Affiliation:</b> {html.escape(PROJECT_AFFILIATION)}</p>
+              <p><b>Contact:</b> <a href="mailto:{html.escape(PROJECT_EMAIL)}">{html.escape(PROJECT_EMAIL)}</a></p>
+              <p><b>Source code:</b> <a href="{html.escape(PROJECT_SOURCE_URL)}" target="_blank">{html.escape(PROJECT_SOURCE_URL)}</a></p>
+              <p><b>Live demo:</b> <a href="{html.escape(PROJECT_DEMO_URL)}" target="_blank">{html.escape(PROJECT_DEMO_URL)}</a></p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f"""
+            <div class="section-card">
+              <h3 style="margin-top:0;color:#07185f;">Rights and permitted use</h3>
+              <p>{html.escape(PROJECT_RIGHTS)}</p>
+              <p>{html.escape(PROJECT_USAGE)}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with right:
+        _section_card("Communication", "Use the contact details below for questions, academic discussion, or collaboration requests.")
+        st.code(PROJECT_EMAIL, language="text")
+        _section_card("Suggested citation", "Use this text when referencing the prototype in slides, reports, or academic material.")
+        st.code(PROJECT_CITATION, language="text")
+
+
 def _finding_trace_events(finding: Dict[str, Any], trace: ProofTrace | None) -> List[ProofEvent]:
     if not trace:
         return []
@@ -837,13 +901,13 @@ def _render_dashboard() -> None:
 def _render_demo_mode() -> None:
     st.header("Demo Mode")
     st.write("Run a complete university-demo scenario with the bundled sample repository.")
-    st.caption("This loads the sample repo, scans it, runs all deterministic agents, saves a history snapshot, and prepares the dashboard, debate view, graph, and reports.")
+    st.caption("This loads the sample repo, scans it, runs all deterministic agents, saves a history snapshot, and prepares reports in one click.")
     _render_presentation_walkthrough()
     sample_path = ROOT / "sample_repo"
     c1, c2, c3 = st.columns(3)
     c1.metric("Demo repository", "sample_repo")
     c2.metric("Agents", len(ALL_AGENTS))
-    c3.metric("Output", "Findings + Trace")
+    c3.metric("Output", "Findings + Trace + Reports")
     if st.button("Load Demo Scenario", type="primary"):
         with st.spinner("Running demo scan and agent pipeline"):
             findings = scan_repository(str(sample_path), max_workers=4)
@@ -855,8 +919,50 @@ def _render_demo_mode() -> None:
             scan_id = _save_scan("university-demo", f"demo:{sample_path}", findings, trace)
             st.session_state.last_scan_id = scan_id
         st.success(f"Demo scenario ready: {len(findings)} findings and {len(trace.events)} proof events.")
-    if st.session_state.get("findings"):
-        _render_dashboard()
+
+    findings = st.session_state.get("findings", [])
+    trace = st.session_state.get("proof_trace")
+    if findings and trace:
+        st.subheader("Demo pipeline output")
+        severity = _severity_counts(findings)
+        d1, d2, d3, d4, d5 = st.columns(5)
+        with d1:
+            _metric_card("Findings", len(findings), "scanner output", "#0ea5e9")
+        with d2:
+            _metric_card("High risks", severity["high"], "priority issues", "#dc2626")
+        with d3:
+            _metric_card("Agents", len(ALL_AGENTS), "pipeline executed", "#b516b5")
+        with d4:
+            _metric_card("Proof events", len(trace.events), "APEC-PS trace", "#059669")
+        with d5:
+            _metric_card("Reports", "Ready", "export below", "#d97706")
+
+        markdown = _build_markdown_report(findings, trace)
+        json_export = _build_json_export(findings, trace)
+        sarif_export = _build_sarif_export(findings)
+        graph_html = _build_argument_graph_html(trace, layout_mode="Hierarchical", collapse_repeated=True)
+        html_report = _build_html_report(findings, trace, graph_html)
+
+        report_tab, graph_tab, secure_tab = st.tabs(["Report downloads", "Argument graph", "PQC secure exchange"])
+        with report_tab:
+            r1, r2, r3 = st.columns(3)
+            with r1:
+                st.download_button("Download Markdown", markdown, file_name="demo_pqc_risk_report.md", mime="text/markdown")
+                st.download_button("Download JSON", json_export, file_name="demo_pqc_risk_report.json", mime="application/json")
+            with r2:
+                st.download_button("Download HTML Report + Graph", html_report, file_name="demo_pqc_risk_report_with_graph.html", mime="text/html")
+                st.download_button("Download SARIF", sarif_export, file_name="demo_pqc_risk_report.sarif", mime="application/sarif+json")
+            with r3:
+                pdf_bytes = _build_pdf_report(markdown)
+                if pdf_bytes:
+                    st.download_button("Download PDF", pdf_bytes, file_name="demo_pqc_risk_report.pdf", mime="application/pdf")
+                if graph_html:
+                    st.download_button("Download Standalone Graph HTML", graph_html, file_name="demo_apecps_argument_graph.html", mime="text/html")
+            _render_polished_report_preview(findings, trace)
+        with graph_tab:
+            _render_graph(trace)
+        with secure_tab:
+            _render_pqc_report_export(html_report, json_export)
 
 
 def _render_debate_view(trace: ProofTrace | None) -> None:
@@ -1738,6 +1844,9 @@ def _build_html_report(findings: List[Dict[str, Any]], trace: ProofTrace | None,
   <h1>APEC-PS</h1>
   <p><b>Argumentation for Trustworthy Agentic AI</b></p>
   <p>Post-Quantum Cryptography Risk Triage</p>
+  <p><b>Author:</b> {html.escape(PROJECT_AUTHOR)} &middot; <b>Affiliation:</b> {html.escape(PROJECT_AFFILIATION)} &middot; <b>Contact:</b> {html.escape(PROJECT_EMAIL)}</p>
+  <p><b>Source code:</b> <a href="{html.escape(PROJECT_SOURCE_URL)}">{html.escape(PROJECT_SOURCE_URL)}</a></p>
+  <p><b>Live demo:</b> <a href="{html.escape(PROJECT_DEMO_URL)}">{html.escape(PROJECT_DEMO_URL)}</a></p>
   <p><small>Generated at {html.escape(datetime.now(timezone.utc).isoformat())}</small></p>
 
   <h2>Findings</h2>
@@ -1754,6 +1863,11 @@ def _build_html_report(findings: List[Dict[str, Any]], trace: ProofTrace | None,
 
   <h2>Proof Events</h2>
   <ul>{events}</ul>
+
+  <h2>Rights and Contact</h2>
+  <p>{html.escape(PROJECT_RIGHTS)}</p>
+  <p>{html.escape(PROJECT_USAGE)}</p>
+  <p><b>Suggested citation:</b> {html.escape(PROJECT_CITATION)}</p>
 </body>
 </html>"""
 
@@ -1906,16 +2020,46 @@ def _render_pqc_report_export(html_report: str, json_export: str) -> None:
         )
 
     with st.expander("Decrypt package locally for verification"):
-        package_json = st.text_area("Encrypted package JSON", value=st.session_state.get("pqc_encrypted_report", ""), height=140)
-        secret_key = st.text_area("Recipient private key", value=keypair["secret_key"] if keypair else "", height=120)
-        if st.button("Decrypt package"):
+        st.caption("Use this for secure exchange: upload or paste a package sent by someone else, then provide your ML-KEM private key.")
+        package_upload = st.file_uploader("Upload encrypted report package", type=["json"], key="pqc_package_upload")
+        key_upload = st.file_uploader("Upload recipient private key", type=["b64", "txt", "key"], key="pqc_private_key_upload")
+        uploaded_package_text = package_upload.getvalue().decode("utf-8") if package_upload else ""
+        uploaded_key_text = key_upload.getvalue().decode("utf-8") if key_upload else ""
+        package_json = st.text_area(
+            "Encrypted package JSON",
+            value=uploaded_package_text or st.session_state.get("pqc_encrypted_report", ""),
+            height=140,
+        )
+        secret_key = st.text_area(
+            "Recipient private key",
+            value=uploaded_key_text or (keypair["secret_key"] if keypair else ""),
+            height=120,
+        )
+        if st.button("Decrypt received package"):
             if not package_json.strip() or not secret_key.strip():
                 st.warning("Package JSON and private key are required.")
             else:
                 try:
                     decrypted = _decrypt_report_with_ml_kem(package_json, secret_key)
+                    package = json.loads(package_json)
+                    plaintext_format = package.get("plaintext_format", "application/octet-stream")
+                    extension = ".html" if plaintext_format == "text/html" else ".json" if plaintext_format == "application/json" else ".bin"
+                    mime = plaintext_format if plaintext_format in {"text/html", "application/json", "text/plain"} else "application/octet-stream"
+                    st.session_state.pqc_decrypted_report = decrypted
+                    st.session_state.pqc_decrypted_format = plaintext_format
                     st.success("Decryption succeeded.")
-                    st.download_button("Download decrypted report", decrypted, file_name="decrypted_apecps_report.html", mime="text/html")
+                    st.download_button(
+                        "Download decrypted report",
+                        decrypted,
+                        file_name=f"decrypted_apecps_report{extension}",
+                        mime=mime,
+                    )
+                    if plaintext_format == "text/html":
+                        components.html(decrypted.decode("utf-8", errors="replace"), height=420, scrolling=True)
+                    elif plaintext_format == "application/json":
+                        st.json(json.loads(decrypted.decode("utf-8")))
+                    else:
+                        st.code(decrypted.decode("utf-8", errors="replace")[:5000])
                 except Exception as exc:
                     st.error(f"Decryption failed: {exc}")
 
@@ -2142,28 +2286,26 @@ def main() -> None:
 
     with st.sidebar:
         st.markdown("### Workflow")
-        nav_sections = [
-            ("OVERVIEW", ["Dashboard", "Demo Mode"], ["Executive summary", "One-click scenario"]),
-            ("INPUT", ["Repository", "Findings"], ["Select source", "Scan and review"]),
-            ("REASONING", ["Agents", "Debate", "Agentic AI"], ["Reason over trace", "Argumentation view", "Optional LLM advisor"]),
-            ("OUTPUT", ["History", "Report"], ["Past scans", "Export evidence"]),
-        ]
         if "active_page" not in st.session_state:
             st.session_state.active_page = "Dashboard"
-        for section_title, pages, captions in nav_sections:
+        for section_title, pages, captions in NAV_SECTIONS:
             st.markdown(f"<div class='nav-section'>{section_title}</div>", unsafe_allow_html=True)
-            current_index = pages.index(st.session_state.active_page) if st.session_state.active_page in pages else None
-            selected = st.radio(
+            key = f"nav_radio_{section_title}"
+            if st.session_state.active_page in pages:
+                st.session_state[key] = st.session_state.active_page
+            else:
+                st.session_state[key] = None
+            index = pages.index(st.session_state.active_page) if st.session_state.active_page in pages else None
+            st.radio(
                 section_title,
                 pages,
                 captions=captions,
-                index=current_index,
-                key=f"nav_radio_{section_title}",
+                index=index,
+                key=key,
                 label_visibility="collapsed",
+                on_change=_set_active_nav,
+                args=(section_title,),
             )
-            if selected != st.session_state.active_page and selected in pages:
-                st.session_state.active_page = selected
-                st.rerun()
         step = st.session_state.active_page
         st.text_input("Project name", value=st.session_state.get("project_name", "default-project"), key="project_name_input")
 
@@ -2172,6 +2314,9 @@ def main() -> None:
 
     elif step == "Demo Mode":
         _render_demo_mode()
+
+    elif step == "About":
+        _render_about_page()
 
     elif step == "Repository":
         st.header("Repository")

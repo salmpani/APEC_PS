@@ -7,6 +7,10 @@ APEC-PS is a Streamlit research prototype for discovering post-quantum
 cryptography (PQC) migration risks and explaining them through an auditable
 multi-agent argumentation trace.
 
+Source code: <https://github.com/salmpani/APEC_PS>
+
+Live demo: <https://apec-ps.streamlit.app/>
+
 The application scans source code, configuration files, certificates, selected
 binary artifacts, and live TLS endpoints. It then runs a deterministic
 multi-agent reasoning pipeline that creates APEC-PS proof events: premises,
@@ -48,21 +52,21 @@ and security-workflow prototyping. It is not a production security scanner.
 
 ```text
 improved_apec_ps_pqc_prototype/
-├── app/
-│   └── app.py
-├── assets/
-│   └── apec-ps-logo.png
-├── sample_repo/
-├── sample_upload_repo/
-├── agents.py
-├── apecps.py
-├── scanner.py
-├── cli_demo.py
-├── requirements.txt
-├── README.md
-├── CHANGELOG.md
-└── .streamlit/
-    └── config.toml
+|-- app/
+|   `-- app.py
+|-- assets/
+|   `-- apec-ps-logo.png
+|-- sample_repo/
+|-- sample_upload_repo/
+|-- agents.py
+|-- apecps.py
+|-- scanner.py
+|-- cli_demo.py
+|-- requirements.txt
+|-- README.md
+|-- CHANGELOG.md
+`-- .streamlit/
+    `-- config.toml
 ```
 
 Important generated/local files:
@@ -489,6 +493,59 @@ LLM-backed advisor, but the deterministic trace remains the auditable baseline.
 - PQC-protected exports protect report confidentiality, but key management is
   still the user's responsibility.
 - This is a research prototype, not a certified security product.
+
+## Author, Rights, And Contact
+
+Author:
+
+```text
+Sofia Almpani
+```
+
+Affiliation:
+
+```text
+School of Applied Mathematical and Physical Sciences, National Technical University of Athens, Greece
+```
+
+Contact:
+
+```text
+s.almpani@gmail.com
+```
+
+Live demo:
+
+```text
+https://apec-ps.streamlit.app/
+```
+
+Source code:
+
+```text
+https://github.com/salmpani/APEC_PS
+```
+
+Rights:
+
+```text
+Copyright (c) 2026 Sofia Almpani. All rights reserved unless explicitly licensed otherwise.
+```
+
+Permitted use:
+
+```text
+Academic demonstration and research prototype. Not certified for production security use.
+```
+
+Suggested citation:
+
+```text
+Sofia Almpani, APEC-PS: Argumentation for Trustworthy Agentic AI - Post-Quantum Cryptography Risk Triage, 2026. Source code: https://github.com/salmpani/APEC_PS. Live demo: https://apec-ps.streamlit.app/
+```
+
+Use the GitHub URL for source-code citation and version tracking, and keep the
+Streamlit URL as the live demo link.
 
 ## Troubleshooting
 
