@@ -23,11 +23,16 @@ and security-workflow prototyping. It is not a production security scanner.
 ## Key Features
 
 - **Demo Mode** for one-click university presentations.
+- **Academic report export** with cover details, methodology, executive
+  summary, APEC-PS reasoning, argument graph, remediation backlog, limitations,
+  and citation.
 - **Guided presentation walkthrough** for a clear live-demo narrative.
 - **Executive Dashboard** with risk score, severity counts, top risks, review
   status, and unresolved argumentation challenges.
 - **Repository and ZIP scanning** for source code, configs, certificates, and
   infrastructure files.
+- **Public GitHub repository scanning** by downloading the default branch ZIP
+  from a GitHub URL.
 - **Live TLS endpoint scanning** for certificate public keys, certificate
   signatures, TLS versions, and cipher indicators.
 - **Context-aware risk scoring** using severity, confidence, retention years,
@@ -42,8 +47,13 @@ and security-workflow prototyping. It is not a production security scanner.
 - **Report exports** in Markdown, PDF, JSON, SARIF, HTML, and standalone graph
   HTML.
 - **Styled report preview** before export.
+- **Report customization** for severity scope, anonymized paths/endpoints,
+  author/contact inclusion, citation inclusion, proof events, remediation
+  backlog, and argument graph inclusion.
 - **Finding-to-agent trace links** showing which agents and proof events used a
   selected finding.
+- **Advanced graph export** with layout selection, agent filters, event-type
+  filters, severity filters, selected-path export, and embedded legend.
 - **PQC-protected report export** using ML-KEM-768, HKDF-SHA256, and
   AES-256-GCM.
 - **Optional LLM advisor agent** using either OpenAI API or local Ollama.
@@ -171,6 +181,18 @@ Fields:
 
 - **Path accessible to this app**: local directory path scanned by the app.
 - **Upload ZIP archive**: upload a zipped project/repository.
+- **GitHub repository URL**: download and scan a public GitHub repository.
+
+Supported GitHub examples:
+
+```text
+https://github.com/owner/repo
+https://github.com/owner/repo/tree/main
+https://github.com/owner/repo/tree/feature-branch
+```
+
+For public GitHub repositories, the app downloads a ZIP archive of the selected
+or default branch into a temporary folder, then scans the extracted source tree.
 
 Recommended ZIP content:
 
@@ -315,12 +337,65 @@ argumentation structure around the security findings.
 
 ### Agentic AI
 
-Optional LLM-backed advisor agent.
+The default **Agentic AI Analysis** uses the best configured coordinator. After a scan,
+open **Agentic AI** and click **Run Agentic AI Analysis**. The app:
 
-Provider options:
+1. runs all deterministic specialist agents;
+2. detects Ollama and an installed local model automatically;
+3. sends the ten highest-risk findings and a compact proof trace to one
+   coordinator call;
+4. appends five structured AI argument nodes: risk claim, supporting argument,
+   migration recommendation, counterargument, and human-review request; and
+5. saves the completed trace in scan history.
 
+Each AI node records its provider, model, generation time, confidence,
+evidence finding IDs, proof-event references, batch ID, and human-review
+status. The application validates model-supplied references before adding them
+to the trace.
+
+In **Debate > Argumentation view**, the AI consensus panel shows:
+
+- evidence-grounded AI moves;
+- agreement and challenge counts;
+- links to deterministic agents;
+- provider and model provenance; and
+- human review status.
+
+A reviewer can accept, reject, or request revision of each AI argument. The
+decision becomes a linked `HumanReviewAgent` proof event and is retained in
+history and report exports. AI-generated review requests never count as human
+approval.
+
+If Ollama is unavailable, the same button uses a deterministic local
+coordinator so the workflow still completes. When `GROQ_API_KEY` is configured,
+the public Streamlit deployment uses Groq Cloud before falling back. Automatic
+provider order is:
+
+```text
+Local app:       Ollama -> Groq -> deterministic fallback
+Streamlit Cloud: Groq -> deterministic fallback
+```
+
+The advanced panel retains manual provider and model controls:
+
+- **Local Ollama**: runs locally without API billing.
+- **Groq Cloud**: hosted inference suitable for Streamlit Community Cloud.
 - **OpenAI API**: requires an API key and available quota.
-- **Local Ollama**: runs locally without OpenAI billing.
+
+Groq setup for Streamlit Community Cloud:
+
+1. Create a Groq API key.
+2. Open the deployed app settings.
+3. Open **Secrets** and add:
+
+```toml
+GROQ_API_KEY = "your_groq_api_key"
+GROQ_MODEL = "openai/gpt-oss-20b"
+```
+
+Do not add these values to GitHub. After saving the secrets, reboot the
+Streamlit app. The Agentic AI page should show
+`Hosted coordinator ready: Groq Cloud`.
 
 OpenAI setup:
 
@@ -335,16 +410,10 @@ Local Ollama setup:
 ollama pull llama3.2
 ```
 
-Then choose:
-
-```text
-Provider: Local Ollama
-Ollama URL: http://localhost:11434
-Model: llama3.2
-```
-
-The LLM advisor can append its output as an APEC-PS proof event from
-`LLMAdvisorAgent`.
+Keep Ollama running at `http://localhost:11434`; the app selects
+`llama3.2:latest` automatically when it is installed. A first request can take
+longer while the model loads into memory. Later requests remain warm for ten
+minutes.
 
 Important: the deterministic agents are the reliable baseline. The LLM advisor
 is optional and should be treated as human-reviewed analysis.
@@ -371,6 +440,9 @@ Exports results.
 
 Available downloads:
 
+- **Academic Markdown / HTML / PDF**: formal academic-style report with cover
+  details, methodology, executive summary, APEC-PS reasoning, graph,
+  remediation backlog, limitations, and citation.
 - **Markdown**: readable report.
 - **HTML Report + Graph**: full report with embedded interactive argument graph.
 - **Standalone Graph HTML**: graph only.
@@ -381,6 +453,33 @@ Available downloads:
 The **Preview** tab provides a styled report preview with summary metrics, top
 findings, governance status, and remediation previews. The raw Markdown report
 is still available inside an expander.
+
+#### Report Customization
+
+Before exporting, use **Report customization** to choose:
+
+- severities to include
+- whether to anonymize file paths and endpoints
+- whether to include the argument graph
+- whether to include proof events
+- whether to include the remediation backlog
+- whether to include author/contact details
+- whether to include the suggested citation
+
+These options affect the report exports and PQC-protected report package.
+
+#### Advanced Graph Export
+
+Inside **Report > Standard reports**, open **Advanced graph export** to create a
+focused argument graph. You can filter by:
+
+- layout: hierarchical, force-directed, or timeline
+- agent
+- proof-event type
+- severity
+- selected reasoning path
+
+The exported graph includes a built-in severity and edge legend.
 
 #### PQC-Protected Report Export
 
