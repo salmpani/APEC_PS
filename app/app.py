@@ -48,6 +48,13 @@ KIND_ICONS = {
     "claim": "[plan]",
     "validation": "[review]",
 }
+AI_ROLE_AGENTS = {
+    "risk_claim": "AI Risk Analyst",
+    "supporting_argument": "AI Evidence Analyst",
+    "migration_recommendation": "AI Migration Planner",
+    "counterargument": "AI Compatibility Critic",
+    "human_review_request": "AI Trust Reviewer",
+}
 
 
 APP_TITLE = "APEC-PS"
@@ -64,11 +71,31 @@ PROJECT_YEAR = "2026"
 PROJECT_RIGHTS = "Copyright (c) 2026 Sofia Almpani. All rights reserved unless explicitly licensed otherwise."
 PROJECT_USAGE = "Academic demonstration and research prototype. Not certified for production security use."
 PROJECT_CITATION = f"Sofia Almpani, APEC-PS: Argumentation for Trustworthy Agentic AI - Post-Quantum Cryptography Risk Triage, 2026. Source code: {PROJECT_SOURCE_URL}. Live demo: {PROJECT_DEMO_URL}"
+DEMO_SCENARIOS = {
+    "Payment API PQC triage": {
+        "path": ROOT / "sample_repo",
+        "project_name": "demo-payment-api",
+        "summary": "Small repository with payment API configuration, RSA/ECDSA key generation, and certificate evidence.",
+        "presentation_angle": "Best for a short end-to-end explanation of finding -> risk -> compatibility challenge -> review.",
+    },
+    "Partner cloud gateway": {
+        "path": ROOT / "sample_upload_repo",
+        "project_name": "demo-partner-gateway",
+        "summary": "Richer repository with gateway YAML, Terraform TLS policy, Python signing code, JavaScript token signing, and certificate material.",
+        "presentation_angle": "Best for showing a more realistic repository with multiple evidence sources.",
+    },
+    "Internal CA migration": {
+        "path": ROOT / "sample_internal_ca",
+        "project_name": "demo-internal-ca",
+        "summary": "Focused PKI scenario with internal CA configuration, RSA certificates, SHA-1 signing, and long-lived identity data.",
+        "presentation_angle": "Best for explaining certificate and signature migration planning.",
+    },
+}
 NAV_SECTIONS = [
-    ("OVERVIEW", ["Dashboard", "Demo Mode", "About"], ["Executive summary", "One-click scenario", "Author and rights"]),
-    ("INPUT", ["Repository", "Findings"], ["Select source", "Scan and review"]),
-    ("REASONING", ["Agents", "Debate", "Agentic AI"], ["Reason over trace", "Argumentation view", "Optional LLM Coordinator"]),
-    ("OUTPUT", ["History", "Report"], ["Past scans", "Export evidence"]),
+    ("OVERVIEW", ["Demo Mode", "Dashboard", "About"], ["One-click scenario", "Executive summary", "Author and rights"]),
+    ("INPUT", ["Repository", "Findings"], ["Select source", "Scan findings"]),
+    ("REASONING", ["Agents", "Agentic AI", "Argument Graphs", "Debate"], ["Specialist trace", "Central AI coordinator", "Graph inspection", "Argumentation view"]),
+    ("OUTPUT", ["Review", "History", "Report"], ["Human decision", "Past scans", "Export evidence"]),
 ]
 
 st.set_page_config(page_title=f"{APP_TITLE} - {APP_SUBTITLE}", layout="wide")
@@ -175,6 +202,52 @@ st.markdown(
         font-weight: 700;
         background: #e2e8f0;
         color: #0f172a;
+      }
+      .decision-step {
+        background: #ffffff;
+        border: 1px solid #d8e0ea;
+        border-left: 4px solid var(--step-accent, #0ea5e9);
+        border-radius: 8px;
+        padding: 12px 14px;
+        min-height: 132px;
+        box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      }
+      .decision-step h4 {
+        margin: 0 0 6px 0;
+        color: #07185f;
+        font-size: 15px;
+      }
+      .decision-step p {
+        margin: 0;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.35;
+      }
+      .conversation-card {
+        background: #ffffff;
+        border: 1px solid #d8e0ea;
+        border-left: 4px solid var(--agent-accent, #0ea5e9);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin: 8px 0;
+      }
+      .conversation-meta {
+        color: #64748b;
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        margin-bottom: 4px;
+      }
+      .conversation-claim {
+        color: #0f172a;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .conversation-refs {
+        color: #64748b;
+        font-size: 12px;
+        margin-top: 6px;
       }
       .download-card {
         background: #ffffff;
@@ -719,8 +792,8 @@ def _render_presentation_walkthrough() -> None:
     steps = [
         ("1", "Load the demo", "Use Demo Mode to run scanner and agents over the bundled sample repository."),
         ("2", "Show risk posture", "Open Dashboard and explain high risks, total score, review state, and top findings."),
-        ("3", "Explain evidence", "Open Findings, select one finding, and show evidence, playbook, review status, and trace links."),
-        ("4", "Show argumentation", "Open Debate and Agents > Argument graph to show support, attack, and validation moves."),
+        ("3", "Explain evidence", "Open Findings, select one finding, and show evidence, playbook, and the decision brief. Use Review for trace links and human decisions."),
+        ("4", "Show argumentation", "Open Debate and Argument Graphs to show support, attack, and validation moves."),
         ("5", "Export securely", "Open Report and export HTML/JSON/SARIF or encrypt the report with ML-KEM + AES-GCM."),
     ]
     cols = st.columns(5)
@@ -847,6 +920,184 @@ def _render_finding_trace_links(finding: Dict[str, Any], trace: ProofTrace | Non
     st.dataframe(table, use_container_width=True, hide_index=True)
 
 
+def _event_reference_summary(event: Any, events_by_id: Dict[str, Any]) -> str:
+    refs = []
+    for ref in event.references or []:
+        target = events_by_id.get(ref)
+        if target:
+            refs.append(f"{target.actor} / {target.kind}")
+        else:
+            refs.append(ref)
+    return ", ".join(refs) if refs else "No direct references"
+
+
+def _conversation_action(event: Any) -> str:
+    if event.kind == "premise":
+        return "Evidence"
+    if event.kind == "support":
+        return "Support"
+    if event.kind == "attack":
+        return "Challenge"
+    if event.kind == "warrant":
+        return "Warrant"
+    if event.kind == "claim":
+        return "Plan"
+    if event.kind == "validation":
+        return "Review"
+    return event.kind.title()
+
+
+def _render_agent_conversation(trace: ProofTrace, events: List[Any] | None = None, compact: bool = False) -> None:
+    conversation_events = events or trace.events
+    if not conversation_events:
+        st.info("No proof events are available for the conversation view.")
+        return
+
+    events_by_id = {event.id: event for event in trace.events}
+    if not compact:
+        st.caption("Readable transcript of how agents move from evidence to challenge, plan, and human review.")
+        actors = sorted({event.actor for event in conversation_events})
+        selected_actors = st.multiselect(
+            "Conversation agents",
+            actors,
+            default=actors,
+            key=f"conversation_agents_{len(conversation_events)}_{conversation_events[0].id}",
+        )
+        conversation_events = [event for event in conversation_events if event.actor in selected_actors]
+
+    for event in conversation_events:
+        icon = event.metadata.get("icon") or AGENT_ICONS.get(event.actor, "bot")
+        severity = event.metadata.get("severity")
+        severity_html = _severity_html(str(severity)) if severity else _status_badge(event.kind)
+        accent = KIND_COLORS.get(event.kind, "#0ea5e9")
+        refs = _event_reference_summary(event, events_by_id)
+        st.markdown(
+            f"""
+            <div class="conversation-card" style="--agent-accent:{accent};">
+              <div class="conversation-meta">{html.escape(str(icon))} {html.escape(event.actor)} - {html.escape(_conversation_action(event))} {severity_html}</div>
+              <div class="conversation-claim">{html.escape(event.claim)}</div>
+              <div class="conversation-refs">Connected to: {html.escape(refs)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def _first_claim(events: List[Any], kind: str, fallback: str) -> str:
+    for event in events:
+        if event.kind == kind:
+            return event.claim
+    return fallback
+
+
+def _render_finding_to_decision(finding: Dict[str, Any], trace: ProofTrace | None) -> None:
+    events = _finding_trace_events(finding, trace)
+    review = finding.get("review", {})
+    playbook = finding.get("playbook", {})
+    supports = [event for event in events if event.kind == "support"]
+    attacks = [event for event in events if event.kind == "attack"]
+    warrants = [event for event in events if event.kind == "warrant"]
+    claims = [event for event in events if event.kind == "claim"]
+    validations = [event for event in events if event.kind == "validation"]
+    decision_status = review.get("status")
+    if not decision_status:
+        decision_status = validations[-1].metadata.get("status") if validations else ("needs_review" if attacks else "open")
+    next_step = review.get("reason") or playbook.get("steps", ["Review finding with the service owner."])[0]
+    open_challenge = attacks[-1].claim if attacks and not review.get("status") else "No unresolved challenge has been recorded for the selected finding."
+
+    st.markdown("**Finding-to-decision view**")
+    st.caption("A decision brief for one finding: what was detected, why it matters, what challenged the plan, and what action should happen next.")
+
+    st.markdown(
+        f"""
+        <div class="section-card">
+          <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;">
+            <div>
+              <h3 style="margin:0;color:#07185f;">{html.escape(str(finding.get('algorithm')))} decision brief</h3>
+              <p style="margin:5px 0 0 0;color:#475569;">
+                {html.escape(str(finding.get('type')))} in {html.escape(str(finding.get('file')))}:{html.escape(str(finding.get('line_no') or '?'))}
+              </p>
+              <p style="margin:8px 0 0 0;color:#334155;">{html.escape(str(finding.get('description') or finding.get('evidence') or 'No description available.'))}</p>
+            </div>
+            <div>{_severity_html(str(finding.get('severity', 'low')))} {_status_badge(str(decision_status))}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    d1, d2, d3, d4, d5 = st.columns(5)
+    steps = [
+        (
+            d1,
+            "1. Evidence",
+            f"{finding.get('algorithm')} detected in {finding.get('file')}:{finding.get('line_no') or '?'}",
+            "#0ea5e9",
+        ),
+        (
+            d2,
+            "2. Risk meaning",
+            supports[0].claim if supports else "Run agents to convert this scanner finding into a risk argument.",
+            "#16a34a",
+        ),
+        (
+            d3,
+            "3. Constraint",
+            warrants[-1].claim if warrants else "No effort or policy warrant is linked yet.",
+            "#d97706",
+        ),
+        (
+            d4,
+            "4. Challenge",
+            open_challenge,
+            "#dc2626",
+        ),
+        (
+            d5,
+            "5. Next action",
+            next_step,
+            "#7c3aed",
+        ),
+    ]
+    for col, title, text, accent in steps:
+        with col:
+            st.markdown(
+                f"""
+                <div class="decision-step" style="--step-accent:{accent};">
+                  <h4>{html.escape(title)}</h4>
+                  <p>{html.escape(str(text))}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        _metric_card("Trace events", len(events), "linked to this finding", "#0ea5e9")
+    with m2:
+        _metric_card("Supports", len(supports), "risk arguments", "#16a34a")
+    with m3:
+        _metric_card("Challenges", len(attacks), "explicit attacks", "#dc2626")
+    with m4:
+        _metric_card("Status", decision_status, "human workflow", "#059669")
+
+    if events:
+        rows = [
+            {
+                "stage": _conversation_action(event),
+                "agent": event.actor,
+                "kind": event.kind,
+                "claim": event.claim,
+            }
+            for event in events
+            if event.kind in {"premise", "support", "attack", "warrant", "claim", "validation"}
+        ]
+        st.markdown("**Linked reasoning summary**")
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Run the Agents page after scanning to show the complete finding-to-decision reasoning path.")
+
+
 def _render_polished_report_preview(findings: List[Dict[str, Any]], trace: ProofTrace | None) -> None:
     enriched = _attach_operational_metadata(findings)
     severity = _severity_counts(enriched)
@@ -885,7 +1136,7 @@ def _render_polished_report_preview(findings: List[Dict[str, Any]], trace: Proof
         else:
             st.markdown(f"{_status_badge('open')} `{len(enriched)}`", unsafe_allow_html=True)
         st.markdown("**Export contents**")
-        st.write("Findings, remediation playbooks, human review decisions, proof events, and optional argument graph.")
+        st.write("Findings, remediation playbooks, human review decisions, proof events, and the argument graph when available.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='preview-card'><h3>Remediation Preview</h3>", unsafe_allow_html=True)
@@ -958,25 +1209,38 @@ def _render_dashboard() -> None:
 
 def _render_demo_mode() -> None:
     st.header("Demo Mode")
-    st.write("Run a complete university-demo scenario with the bundled sample repository.")
-    st.caption("This loads the sample repo, scans it, runs all deterministic agents, saves a history snapshot, and prepares reports in one click.")
+    st.write("Run a complete academic-demo scenario with a selected built-in repository.")
+    st.caption("This loads the selected scenario, scans it, runs all deterministic agents, saves a history snapshot, and prepares reports in one click.")
     _render_presentation_walkthrough()
-    sample_path = ROOT / "sample_repo"
+
+    scenario_name = st.selectbox(
+        "Demo scenario",
+        list(DEMO_SCENARIOS.keys()),
+        help="Choose the presentation story you want to demonstrate.",
+    )
+    scenario = DEMO_SCENARIOS[scenario_name]
+    sample_path = Path(scenario["path"])
+    _section_card(str(scenario["summary"]), str(scenario["presentation_angle"]))
     c1, c2, c3 = st.columns(3)
-    c1.metric("Demo repository", "sample_repo")
+    c1.metric("Demo repository", sample_path.name)
     c2.metric("Agents", len(ALL_AGENTS))
     c3.metric("Output", "Findings + Trace + Reports")
-    if st.button("Load Demo Scenario", type="primary"):
+    if st.button("Run selected demo scenario", type="primary"):
+        if not sample_path.exists():
+            st.error(f"Demo scenario path is missing: {sample_path}")
+            return
         with st.spinner("Running demo scan and agent pipeline"):
             findings = scan_repository(str(sample_path), max_workers=4)
             trace = _run_agent_pipeline(findings)
             st.session_state.repo_path = str(sample_path)
+            st.session_state.repo_source = f"demo:{scenario_name}"
             st.session_state.findings = findings
             st.session_state.proof_trace = trace
-            st.session_state.project_name = "university-demo"
-            scan_id = _save_scan("university-demo", f"demo:{sample_path}", findings, trace)
+            st.session_state.project_name = str(scenario["project_name"])
+            st.session_state.demo_scenario = scenario_name
+            scan_id = _save_scan(str(scenario["project_name"]), f"demo:{sample_path}", findings, trace)
             st.session_state.last_scan_id = scan_id
-        st.success(f"Demo scenario ready: {len(findings)} findings and {len(trace.events)} proof events.")
+        st.success(f"{scenario_name} ready: {len(findings)} findings and {len(trace.events)} proof events.")
 
     findings = st.session_state.get("findings", [])
     trace = st.session_state.get("proof_trace")
@@ -1003,7 +1267,9 @@ def _render_demo_mode() -> None:
         university_markdown = _build_university_markdown_report(findings, trace)
         university_html = _build_university_html_report(findings, trace, graph_html)
 
-        report_tab, graph_tab, secure_tab = st.tabs(["Report downloads", "Argument graph", "PQC secure exchange"])
+        report_tab, decision_tab, secure_tab = st.tabs(
+            ["Report downloads", "Finding-to-decision", "PQC secure exchange"]
+        )
         with report_tab:
             st.markdown(
                 "<div class='download-card'><h4>Academic Report</h4><p>Formal academic-style report for your presentation or submission.</p></div>",
@@ -1044,8 +1310,10 @@ def _render_demo_mode() -> None:
                 if graph_html:
                     st.download_button("Download Standalone Graph HTML", graph_html, file_name="demo_apecps_argument_graph.html", mime="text/html")
             _render_polished_report_preview(findings, trace)
-        with graph_tab:
-            _render_graph(trace)
+        with decision_tab:
+            enriched = _attach_operational_metadata(findings)
+            top_finding = sorted(enriched, key=lambda item: item.get("risk_score", 0), reverse=True)[0]
+            _render_finding_to_decision(top_finding, trace)
         with secure_tab:
             _render_pqc_report_export(html_report, json_export)
 
@@ -1115,9 +1383,100 @@ def _render_debate_view(trace: ProofTrace | None) -> None:
             hide_index=True,
         )
 
-    if any(event.metadata.get("ai_generated") for event in events):
-        st.divider()
-        _render_ai_argumentation(trace, interactive=True)
+    st.divider()
+    st.subheader("Agent conversation transcript")
+    _render_agent_conversation(trace)
+
+
+def _ai_event_is_grounded(event: Any, events_by_id: Dict[str, Any]) -> bool:
+    if event.metadata.get("evidence_grounded") is not None:
+        return bool(event.metadata.get("evidence_grounded"))
+    if event.metadata.get("evidence_finding_ids"):
+        return True
+    return any(
+        reference in events_by_id and not events_by_id[reference].metadata.get("ai_generated")
+        for reference in (event.references or [])
+    )
+
+
+def _ai_trust_score(event: Any, batch_events: List[Any], events_by_id: Dict[str, Any]) -> Tuple[int, int, List[str]]:
+    score = 0
+    checks = []
+    grounded = _ai_event_is_grounded(event, events_by_id)
+    if grounded:
+        score += 1
+    checks.append("evidence-linked" if grounded else "missing evidence link")
+
+    try:
+        confidence = float(event.metadata.get("confidence", 0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    if confidence >= 0.75:
+        score += 1
+    checks.append("confidence >= 75%" if confidence >= 0.75 else "low confidence")
+
+    has_warrant = event.kind == "warrant" or any(
+        reference in events_by_id and events_by_id[reference].kind == "warrant"
+        for reference in (event.references or [])
+    )
+    if has_warrant:
+        score += 1
+    checks.append("has warrant" if has_warrant else "no warrant link")
+
+    has_counterargument = event.kind == "attack" or any(batch_event.kind == "attack" for batch_event in batch_events)
+    if has_counterargument:
+        score += 1
+    checks.append("counterargument present" if has_counterargument else "no counterargument")
+
+    reviewed = event.metadata.get("review_status") not in {None, "", "pending_review"}
+    if reviewed:
+        score += 1
+    checks.append("human-reviewed" if reviewed else "pending human review")
+    return score, 5, checks
+
+
+def _render_ai_vs_deterministic_comparison(trace: ProofTrace, batch_events: List[Any]) -> None:
+    deterministic_events = [event for event in trace.events if not event.metadata.get("ai_generated")]
+    if not deterministic_events or not batch_events:
+        return
+
+    events_by_kind = {
+        "risk": [event for event in deterministic_events if event.actor in {"QuantumRiskAgent", "ThreatIntelligenceAgent"}],
+        "constraints": [event for event in deterministic_events if event.actor in {"CompatibilityAgent", "PerformanceCostAgent", "CriticAgent"}],
+        "plan": [event for event in deterministic_events if event.actor == "MigrationPlannerAgent"],
+        "review": [event for event in deterministic_events if event.actor == "HumanReviewAgent"],
+    }
+    ai_by_role = {event.metadata.get("argument_role"): event for event in batch_events}
+    rows = [
+        {
+            "Decision area": "Risk interpretation",
+            "Deterministic agents": "; ".join(event.claim for event in events_by_kind["risk"][-2:]) or "-",
+            "AI agents": ai_by_role.get("risk_claim", ai_by_role.get("supporting_argument")).claim
+            if ai_by_role.get("risk_claim") or ai_by_role.get("supporting_argument")
+            else "-",
+            "Trust signal": "Agreement is stronger when the AI claim links back to deterministic discovery or risk events.",
+        },
+        {
+            "Decision area": "Constraints and critique",
+            "Deterministic agents": "; ".join(event.claim for event in events_by_kind["constraints"][-2:]) or "-",
+            "AI agents": ai_by_role.get("counterargument").claim if ai_by_role.get("counterargument") else "-",
+            "Trust signal": "The workflow is safer when both deterministic and AI agents preserve objections.",
+        },
+        {
+            "Decision area": "Migration plan",
+            "Deterministic agents": "; ".join(event.claim for event in events_by_kind["plan"][-1:]) or "-",
+            "AI agents": ai_by_role.get("migration_recommendation").claim if ai_by_role.get("migration_recommendation") else "-",
+            "Trust signal": "Planner claims should be evidence-linked and remain blocked until review.",
+        },
+        {
+            "Decision area": "Human governance",
+            "Deterministic agents": "; ".join(event.claim for event in events_by_kind["review"][-1:]) or "-",
+            "AI agents": ai_by_role.get("human_review_request").claim if ai_by_role.get("human_review_request") else "-",
+            "Trust signal": "AI may request review, but only a human review event validates the decision.",
+        },
+    ]
+    st.subheader("AI vs deterministic agent comparison")
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
 def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
@@ -1132,24 +1491,20 @@ def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
         batch_events = ai_events
     events_by_id = {event.id: event for event in trace.events}
 
-    grounded = [
-        event
-        for event in batch_events
-        if any(
-            reference in events_by_id and not events_by_id[reference].metadata.get("ai_generated")
-            for reference in (event.references or [])
-        )
-    ]
+    grounded = [event for event in batch_events if _ai_event_is_grounded(event, events_by_id)]
     agreements = [event for event in batch_events if event.kind in {"support", "claim", "warrant"}]
     disagreements = [event for event in batch_events if event.kind == "attack"]
     reviewed = [event for event in batch_events if event.metadata.get("review_status") != "pending_review"]
+    trust_scores = [_ai_trust_score(event, batch_events, events_by_id)[0] for event in batch_events]
+    average_trust = round(sum(trust_scores) / len(trust_scores), 1) if trust_scores else 0
 
-    st.subheader("AI participation and consensus")
-    c1, c2, c3, c4 = st.columns(4)
+    st.subheader("AI agent participation and trust")
+    c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("AI argument moves", len(batch_events))
-    c2.metric("Evidence-grounded", f"{len(grounded)}/{len(batch_events)}")
-    c3.metric("Agreement / challenge", f"{len(agreements)} / {len(disagreements)}")
-    c4.metric("Human-reviewed", f"{len(reviewed)}/{len(batch_events)}")
+    c2.metric("AI role agents", len({event.actor for event in batch_events}))
+    c3.metric("Evidence-grounded", f"{len(grounded)}/{len(batch_events)}")
+    c4.metric("Trust score", f"{average_trust}/5")
+    c5.metric("Human-reviewed", f"{len(reviewed)}/{len(batch_events)}")
 
     rows = []
     for event in batch_events:
@@ -1160,11 +1515,17 @@ def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
                 if reference in events_by_id and not events_by_id[reference].metadata.get("ai_generated")
             }
         )
+        trust_score, trust_max, trust_checks = _ai_trust_score(event, batch_events, events_by_id)
+        grounded_label = "Evidence-grounded" if _ai_event_is_grounded(event, events_by_id) else "Not evidence-grounded"
         rows.append(
             {
+                "AI agent": event.actor,
                 "AI role": str(event.metadata.get("argument_role", event.kind)).replace("_", " ").title(),
                 "Move": event.kind,
                 "Claim": event.claim,
+                "Grounding": grounded_label,
+                "Trust score": f"{trust_score}/{trust_max}",
+                "Trust checklist": "; ".join(trust_checks),
                 "Confidence": f"{round(float(event.metadata.get('confidence', 0)) * 100)}%",
                 "Linked deterministic agents": ", ".join(linked_actors) or "AI-chain link",
                 "Human status": event.metadata.get("review_status", "pending_review"),
@@ -1190,11 +1551,13 @@ def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
         f"{provenance.get('generated_at', '-')} / batch {provenance.get('ai_batch_id', '-')}"
     )
 
+    _render_ai_vs_deterministic_comparison(trace, batch_events)
+
     if not interactive:
-        st.caption("Open Debate > Argumentation view to accept, reject, or request revision of individual AI arguments.")
+        st.caption("Open Agentic AI to accept, reject, or request revision of individual AI arguments.")
         return
 
-    st.markdown("**Human review of AI argument**")
+    st.markdown("**Human consensus of AI argument**")
     selected_id = st.selectbox(
         "AI argument to review",
         [event.id for event in batch_events],
@@ -1371,11 +1734,11 @@ def _agentic_prompt_payload(
             "Do not claim that changes were executed.",
         ],
         "required_roles": [
-            {"role": "risk_claim", "kind": "claim"},
-            {"role": "supporting_argument", "kind": "support"},
-            {"role": "migration_recommendation", "kind": "warrant"},
-            {"role": "counterargument", "kind": "attack"},
-            {"role": "human_review_request", "kind": "validation"},
+            {"role": "risk_claim", "kind": "claim", "ai_agent": AI_ROLE_AGENTS["risk_claim"]},
+            {"role": "supporting_argument", "kind": "support", "ai_agent": AI_ROLE_AGENTS["supporting_argument"]},
+            {"role": "migration_recommendation", "kind": "warrant", "ai_agent": AI_ROLE_AGENTS["migration_recommendation"]},
+            {"role": "counterargument", "kind": "attack", "ai_agent": AI_ROLE_AGENTS["counterargument"]},
+            {"role": "human_review_request", "kind": "validation", "ai_agent": AI_ROLE_AGENTS["human_review_request"]},
         ],
         "schema": {
             "summary": "short decision brief",
@@ -1576,17 +1939,17 @@ def _parse_ai_argument_payload(raw_response: str, findings: List[Dict[str, Any]]
 
 def _format_ai_argument_payload(payload: Dict[str, Any]) -> str:
     labels = {
-        "risk_claim": "Priority risk",
-        "supporting_argument": "Supporting argument",
-        "migration_recommendation": "Migration recommendation",
-        "counterargument": "Counterargument",
-        "human_review_request": "Human decision",
+        "risk_claim": "AI Risk Analyst",
+        "supporting_argument": "AI Evidence Analyst",
+        "migration_recommendation": "AI Migration Planner",
+        "counterargument": "AI Compatibility Critic",
+        "human_review_request": "AI Trust Reviewer",
     }
     lines = [f"**Decision brief:** {payload.get('summary', '')}"]
     for argument in payload.get("arguments", []):
         label = labels.get(argument.get("role"), str(argument.get("role", "Argument")).replace("_", " ").title())
         confidence = round(float(argument.get("confidence", 0)) * 100)
-        lines.append(f"**{label} ({confidence}% confidence):** {argument.get('claim', '')}")
+        lines.append(f"**{label} ({argument.get('kind')} / {confidence}% confidence):** {argument.get('claim', '')}")
     return "\n\n".join(lines)
 
 
@@ -1604,6 +1967,7 @@ def _append_structured_ai_events(
         reverse=True,
     )[:20]
     existing_ids = {event.id for event in trace.events}
+    events_by_id = {event.id: event for event in trace.events}
     premise_events = [event for event in trace.events if event.kind == "premise"]
     generated_at = datetime.now(timezone.utc).isoformat()
     batch_seed = f"{generated_at}:{provider}:{model}:{payload.get('summary', '')}"
@@ -1646,15 +2010,25 @@ def _append_structured_ai_events(
                 if (event := by_role.get(name)) is not None
             )
 
+        event_actor = AI_ROLE_AGENTS.get(role, actor)
+        unique_references = list(dict.fromkeys(references))[:12]
+        evidence_grounded = bool(evidence_ids) or any(
+            reference in events_by_id and not events_by_id[reference].metadata.get("ai_generated")
+            for reference in unique_references
+        )
         event = create_event(
-            actor=actor,
+            actor=event_actor,
             kind=argument["kind"],
             claim=argument["claim"],
-            references=list(dict.fromkeys(references))[:12],
+            references=unique_references,
             severity=argument.get("severity"),
             confidence=argument.get("confidence"),
             argument_role=role,
+            ai_role_agent=event_actor,
+            coordinator_actor=actor,
             evidence_finding_ids=evidence_ids,
+            evidence_grounded=evidence_grounded,
+            grounding_status="evidence-grounded" if evidence_grounded else "not evidence-grounded",
             ai_generated=True,
             provenance="llm_generated",
             provider=provider,
@@ -1668,6 +2042,14 @@ def _append_structured_ai_events(
         created.append(event)
         by_role[role] = event
         existing_ids.add(event.id)
+        events_by_id[event.id] = event
+
+    refreshed_by_id = {event.id: event for event in trace.events}
+    for event in created:
+        score, maximum, checks = _ai_trust_score(event, created, refreshed_by_id)
+        event.metadata["trust_score"] = score
+        event.metadata["trust_score_max"] = maximum
+        event.metadata["trust_checks"] = checks
     return created
 
 
@@ -1719,11 +2101,14 @@ def _run_ollama_agentic_analysis(
 
 
 def _render_agentic_ai_upgrade() -> None:
-    st.header("Agentic AI Analysis")
-    st.write("Run every specialist agent and one local or hosted LLM coordinator in a single step.")
+    st.header("Agentic AI Coordinator")
+    st.write(
+        "Use this as the central reasoning workflow: specialist agents build the deterministic APEC-PS trace, "
+        "then an LLM or deterministic coordinator synthesizes risk, counterarguments, and review actions into linked proof events."
+    )
     findings = st.session_state.get("findings", [])
     if not findings:
-        st.info("Run Demo Mode or a scan first so the LLM agent has evidence to analyze.")
+        st.info("Run Demo Mode or a scan first so the Agentic AI coordinator has evidence to analyze.")
         return
 
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -1732,22 +2117,43 @@ def _render_agentic_ai_upgrade() -> None:
     selected_model = _select_ollama_model(installed_models, default_model)
     groq_key = _configured_secret("GROQ_API_KEY")
     groq_model = _configured_secret("GROQ_MODEL") or "openai/gpt-oss-20b"
-    automatic_provider = "Local Ollama" if installed_models else "Groq Cloud" if groq_key else "Deterministic"
-    automatic_model = selected_model if installed_models else groq_model if groq_key else "fallback"
+    automatic_provider = "Groq Cloud" if groq_key else "Local Ollama" if installed_models else "Deterministic"
+    automatic_model = groq_model if groq_key else selected_model if installed_models else "fallback"
     status_col, scope_col, mode_col = st.columns(3)
     status_col.metric("AI backend", "Ready" if installed_models or groq_key else "Fallback")
     scope_col.metric("Specialist agents", len(ALL_AGENTS))
     mode_col.metric("Coordinator", automatic_provider)
     mode_col.caption(automatic_model)
-    if installed_models:
-        st.success(f"Local coordinator ready: {selected_model}")
-    elif groq_key:
+    if groq_key:
         st.success(f"Hosted coordinator ready: Groq Cloud / {groq_model}")
+    elif installed_models:
+        st.success(f"Local coordinator ready: {selected_model}")
     else:
         st.warning(
-            "No LLM provider is configured. Analysis will use the deterministic coordinator. "
+            "No LLM provider is configured. The central workflow will use the deterministic coordinator. "
             "For Streamlit Cloud, add GROQ_API_KEY in app secrets."
         )
+
+    with st.expander("AI role agents and trust controls", expanded=True):
+        st.write(
+            "The coordinator produces separate AI role-agent arguments. Each role is stored as its own APEC-PS proof event, "
+            "so the system can compare AI reasoning with deterministic agents instead of accepting one opaque summary."
+        )
+        role_rows = [
+            {
+                "AI role agent": agent_name,
+                "APEC-PS move": {
+                    "risk_claim": "claim",
+                    "supporting_argument": "support",
+                    "migration_recommendation": "warrant",
+                    "counterargument": "attack",
+                    "human_review_request": "validation request",
+                }[role],
+                "Trust rule": "Must be evidence-linked, confidence-scored, counterargument-aware, and human-reviewed.",
+            }
+            for role, agent_name in AI_ROLE_AGENTS.items()
+        ]
+        st.dataframe(pd.DataFrame(role_rows), use_container_width=True, hide_index=True)
 
     if st.button("Run Agentic AI Analysis", type="primary", use_container_width=True):
         progress = st.progress(0, text="Running specialist agents")
@@ -1761,7 +2167,13 @@ def _render_agentic_ai_upgrade() -> None:
         model_name = "deterministic"
         provider_failure = ""
         try:
-            if installed_models:
+            if groq_key:
+                progress.progress(len(ALL_AGENTS) / (len(ALL_AGENTS) + 1), text=f"Coordinating with Groq / {groq_model}")
+                raw_analysis = _run_groq_agentic_analysis(findings, trace, groq_key, groq_model)
+                coordinator = "GroqCoordinatorAgent"
+                provider_name = "Groq Cloud"
+                model_name = groq_model
+            elif installed_models:
                 progress.progress(len(ALL_AGENTS) / (len(ALL_AGENTS) + 1), text=f"Coordinating with {selected_model}")
                 raw_analysis = _run_ollama_agentic_analysis(
                     findings,
@@ -1773,12 +2185,6 @@ def _render_agentic_ai_upgrade() -> None:
                 coordinator = "OllamaCoordinatorAgent"
                 provider_name = "Local Ollama"
                 model_name = selected_model
-            elif groq_key:
-                progress.progress(len(ALL_AGENTS) / (len(ALL_AGENTS) + 1), text=f"Coordinating with Groq / {groq_model}")
-                raw_analysis = _run_groq_agentic_analysis(findings, trace, groq_key, groq_model)
-                coordinator = "GroqCoordinatorAgent"
-                provider_name = "Groq Cloud"
-                model_name = groq_model
             else:
                 raise RuntimeError("No LLM provider is configured")
             if not raw_analysis.strip():
@@ -1817,12 +2223,12 @@ def _render_agentic_ai_upgrade() -> None:
         if provider_failure:
             st.warning(f"The configured LLM could not complete the request, so the deterministic fallback was used: {provider_failure}")
 
-    with st.expander("Advanced LLM advisor settings"):
-        st.caption("Select a provider or model and append a separate structured advisor opinion.")
+    with st.expander("Advanced coordinator settings"):
+        st.caption("Select a provider or model and append a separate structured coordinator opinion.")
         trace: ProofTrace | None = st.session_state.get("proof_trace")
         openai_key = _configured_secret("OPENAI_API_KEY")
-        provider_options = ["Local Ollama", "Groq Cloud", "OpenAI API"]
-        default_provider_index = 0 if installed_models else 1
+        provider_options = ["Groq Cloud", "Local Ollama", "OpenAI API"]
+        default_provider_index = 0
         provider = st.selectbox("LLM provider", provider_options, index=default_provider_index)
         if provider == "OpenAI API":
             api_key_input = st.text_input(
@@ -1855,9 +2261,9 @@ def _render_agentic_ai_upgrade() -> None:
                 model = st.text_input("Ollama model", value=selected_model)
             advanced_ollama_url = st.text_input("Ollama URL", value=ollama_url)
         append_to_trace = st.checkbox("Append structured AI arguments to proof trace", value=True)
-        if st.button("Run Advanced Advisor"):
+        if st.button("Run Advanced Coordinator"):
             try:
-                with st.spinner("Calling LLM advisor agent"):
+                with st.spinner("Calling Agentic AI coordinator"):
                     if provider == "OpenAI API":
                         key = api_key_input.strip() or openai_key
                         if not key:
@@ -1889,7 +2295,7 @@ def _render_agentic_ai_upgrade() -> None:
                         trace,
                         findings,
                         argument_payload,
-                        actor="LLMAdvisorAgent",
+                        actor="LLMCoordinatorAgent",
                         provider=provider,
                         model=model.strip(),
                     )
@@ -1901,21 +2307,21 @@ def _render_agentic_ai_upgrade() -> None:
                         trace,
                     )
                     st.session_state.last_scan_id = scan_id
-                st.session_state.llm_agentic_source = f"Advanced Advisor - {provider} - {model.strip()}"
+                st.session_state.llm_agentic_source = f"Advanced Coordinator - {provider} - {model.strip()}"
                 suffix = f" as {len(ai_events)} linked argument nodes." if ai_events else "."
-                st.success("LLM advisor analysis generated and displayed below" + suffix)
+                st.success("Coordinator analysis generated and displayed below" + suffix)
             except Exception as exc:
-                st.error(f"LLM advisor failed: {exc}")
+                st.error(f"Coordinator analysis failed: {exc}")
 
     if st.session_state.get("llm_agentic_analysis"):
         st.subheader("Latest LLM analysis")
-        st.caption(st.session_state.get("llm_agentic_source", "LLM coordinator output"))
+        st.caption(st.session_state.get("llm_agentic_source", "Agentic AI coordinator output"))
         st.markdown(st.session_state.llm_agentic_analysis)
-        st.caption("Advisory output only. A human reviewer must approve remediation decisions.")
+        st.caption("Coordinator output is part of the reasoning trace. A human reviewer must still approve remediation decisions.")
 
     trace = st.session_state.get("proof_trace")
     if trace and any(event.metadata.get("ai_generated") for event in trace.events):
-        _render_ai_argumentation(trace, interactive=False)
+        _render_ai_argumentation(trace, interactive=True)
 
 
 def _flatten_events(trace: ProofTrace) -> List[Dict[str, Any]]:
@@ -2179,7 +2585,7 @@ def _build_university_markdown_report(
             "",
             "- The scanner is a research prototype and should not replace certified security testing.",
             "- Findings require validation by the owning engineering/security team.",
-            "- Optional LLM advice must be treated as advisory and human-reviewed.",
+            "- LLM coordinator arguments must be evidence-linked and human-reviewed before remediation.",
             "- Public deployments should use sample data and avoid private repositories or internal endpoints.",
         ]
     )
@@ -2528,7 +2934,6 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
         ),
     )
     finding = next(item for item in filtered if item["finding_id"] == selected_finding_id)
-    playbook = finding["playbook"]
     review = finding.get("review", {})
     st.markdown(
         f"""
@@ -2544,41 +2949,98 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
         """,
         unsafe_allow_html=True,
     )
-    detail_tab, playbook_tab, trace_tab, review_tab = st.tabs(["Finding detail", "Remediation playbook", "Trace links", "Human review"])
-    with detail_tab:
-        d1, d2, d3, d4 = st.columns(4)
-        with d1:
-            _metric_card("Risk score", finding.get("risk_score", "-"), "context-aware score", "#b516b5")
-        with d2:
-            _metric_card("Confidence", finding.get("confidence", "-"), "detection quality", "#0ea5e9")
-        with d3:
-            _metric_card("Impact", finding.get("business_impact", "-"), "business context", "#d97706")
-        with d4:
-            _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", "#059669")
-        st.markdown("**Evidence**")
-        st.code(str(finding.get("evidence") or "No evidence string available."))
-        st.markdown("**Description**")
-        st.write(finding.get("description", ""))
-    with playbook_tab:
-        st.markdown("**Recommended remediation path**")
-        st.write(playbook["summary"])
-        for idx, step in enumerate(playbook["steps"], start=1):
-            st.write(f"{idx}. {step}")
+    st.markdown("**Finding detail**")
+    d1, d2, d3, d4 = st.columns(4)
+    with d1:
+        _metric_card("Risk score", finding.get("risk_score", "-"), "context-aware score", "#b516b5")
+    with d2:
+        _metric_card("Confidence", finding.get("confidence", "-"), "detection quality", "#0ea5e9")
+    with d3:
+        _metric_card("Impact", finding.get("business_impact", "-"), "business context", "#d97706")
+    with d4:
+        _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", "#059669")
+    st.markdown("**Evidence**")
+    st.code(str(finding.get("evidence") or "No evidence string available."))
+    st.markdown("**Description**")
+    st.write(finding.get("description", ""))
+
+
+def _render_review_page() -> None:
+    st.header("Review")
+    findings = st.session_state.get("findings", [])
+    if not findings:
+        _empty_state("No findings to review", "Run Demo Mode or scan a repository first. Review links findings to APEC-PS trace events and human decisions.")
+        return
+
+    enriched = _attach_operational_metadata(findings)
+    st.write("Inspect the trace links for a finding and record the human review decision separately from the scanner output.")
+    selected_finding_id = st.selectbox(
+        "Finding to review",
+        [finding["finding_id"] for finding in enriched],
+        format_func=lambda fid: next(
+            f"{item['algorithm']} / {item['type']} / {item['severity']} / {fid}"
+            for item in enriched
+            if item["finding_id"] == fid
+        ),
+        key="review_page_finding",
+    )
+    finding = next(item for item in enriched if item["finding_id"] == selected_finding_id)
+    review = finding.get("review", {})
+
+    st.markdown(
+        f"""
+        <div class="section-card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;">
+            <div>
+              <h3 style="margin:0;color:#07185f;">{html.escape(str(finding.get('algorithm')))} review case</h3>
+              <p style="margin:4px 0 0 0;color:#64748b;">{html.escape(str(finding.get('type')))} in {html.escape(str(finding.get('file')))}:{html.escape(str(finding.get('line_no') or '?'))}</p>
+            </div>
+            <div>{_severity_html(str(finding.get('severity', 'low')))} {_status_badge(review.get('status', 'open'))}</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    decision_tab, trace_tab, playbook_tab, review_tab = st.tabs(
+        ["Finding-to-decision", "Trace links", "Remediation playbook", "Human review"]
+    )
+    with decision_tab:
+        _render_finding_to_decision(finding, st.session_state.get("proof_trace"))
     with trace_tab:
         _render_finding_trace_links(finding, st.session_state.get("proof_trace"))
+    with playbook_tab:
+        playbook = finding.get("playbook", {})
+        st.markdown("**Recommended remediation path**")
+        st.write(playbook.get("summary", "No remediation playbook is available for this finding."))
+        for idx, step in enumerate(playbook.get("steps", []), start=1):
+            st.write(f"{idx}. {step}")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            _metric_card("Priority", playbook.get("priority", finding.get("severity", "-")), "playbook priority", "#dc2626")
+        with c2:
+            _metric_card("Algorithm", finding.get("algorithm", "-"), "affected primitive", "#0ea5e9")
+        with c3:
+            _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", "#7c3aed")
     with review_tab:
         st.markdown("**Human review decision**")
+        statuses = ["open", "planned", "accepted", "false_positive", "fixed", "needs_review"]
+        current_status = review.get("status", "open")
         status = st.selectbox(
             "Status",
-            ["open", "planned", "accepted", "false_positive", "fixed", "needs_review"],
-            index=["open", "planned", "accepted", "false_positive", "fixed", "needs_review"].index(review.get("status", "open"))
-            if review.get("status", "open") in ["open", "planned", "accepted", "false_positive", "fixed", "needs_review"]
-            else 0,
+            statuses,
+            index=statuses.index(current_status) if current_status in statuses else 0,
+            key="review_page_status",
         )
-        reviewer = st.text_input("Reviewer", value=review.get("reviewer", ""))
-        reason = st.text_area("Reason", value=review.get("reason", ""))
-        expires_on = st.text_input("Expiry date", value=review.get("expires_on") or "", placeholder="YYYY-MM-DD, optional")
-        if st.button("Save review decision"):
+        reviewer = st.text_input("Reviewer", value=review.get("reviewer", ""), key="review_page_reviewer")
+        reason = st.text_area("Reason", value=review.get("reason", ""), key="review_page_reason")
+        expires_on = st.text_input(
+            "Expiry date",
+            value=review.get("expires_on") or "",
+            placeholder="YYYY-MM-DD, optional",
+            key="review_page_expires",
+        )
+        if st.button("Save review decision", type="primary"):
             if not reviewer.strip() or not reason.strip():
                 st.warning("Reviewer and reason are required.")
             else:
@@ -2601,8 +3063,18 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
                     st.session_state.get("proof_trace"),
                 )
                 st.session_state.last_scan_id = scan_id
-                st.success("Review decision saved.")
+                st.success("Review decision saved and linked to the current APEC-PS trace.")
                 st.rerun()
+
+
+def _render_argument_graphs_page() -> None:
+    st.header("Argument Graphs")
+    trace: ProofTrace | None = st.session_state.get("proof_trace")
+    if not trace:
+        _empty_state("No argument graph yet", "Run Demo Mode, Agents, or Agentic AI first to create an APEC-PS proof trace.")
+        return
+    st.write("Inspect the APEC-PS proof trace as a graph of evidence, support, attacks, warrants, plans, AI-generated arguments, and human validation.")
+    _render_graph(trace)
 
 
 def _render_trace(trace: ProofTrace) -> None:
@@ -2914,6 +3386,8 @@ def _build_argument_graph_html(
                 f"<br>Provider: {metadata.get('provider', '-')}"
                 f"<br>Model: {metadata.get('model', '-')}"
                 f"<br>Confidence: {metadata.get('confidence', '-')}"
+                f"<br>Grounding: {metadata.get('grounding_status', '-')}"
+                f"<br>Trust score: {metadata.get('trust_score', '-')}/{metadata.get('trust_score_max', '-')}"
                 f"<br>Human review: {metadata.get('review_status', 'pending_review')}"
             )
         label = f"AI - {str(metadata.get('argument_role', kind)).replace('_', ' ')}" if is_ai else f"{node['actor']}\n{kind}"
@@ -3595,6 +4069,8 @@ def _render_graph(trace: ProofTrace) -> None:
                 f"<br>Provider: {metadata.get('provider', '-')}"
                 f"<br>Model: {metadata.get('model', '-')}"
                 f"<br>Confidence: {metadata.get('confidence', '-')}"
+                f"<br>Grounding: {metadata.get('grounding_status', '-')}"
+                f"<br>Trust score: {metadata.get('trust_score', '-')}/{metadata.get('trust_score_max', '-')}"
                 f"<br>Human review: {metadata.get('review_status', 'pending_review')}"
             )
 
@@ -3765,7 +4241,7 @@ def main() -> None:
     with st.sidebar:
         st.markdown("### Workflow")
         if "active_page" not in st.session_state:
-            st.session_state.active_page = "Dashboard"
+            st.session_state.active_page = "Demo Mode"
         for section_title, pages, captions in NAV_SECTIONS:
             st.markdown(f"<div class='nav-section'>{section_title}</div>", unsafe_allow_html=True)
             key = f"nav_radio_{section_title}"
@@ -3919,6 +4395,9 @@ def main() -> None:
         else:
             _empty_state("No findings yet", "Run the repository scanner, scan live TLS endpoints, or use Demo Mode to create a complete example with findings and agent reasoning.")
 
+    elif step == "Review":
+        _render_review_page()
+
     elif step == "Agents":
         st.header("Multi-agent reasoning")
         findings = st.session_state.get("findings", [])
@@ -3947,11 +4426,7 @@ def main() -> None:
 
         trace = st.session_state.get("proof_trace")
         if trace:
-            tab_table, tab_graph = st.tabs(["Proof events", "Argument graph"])
-            with tab_table:
-                _render_trace(trace)
-            with tab_graph:
-                _render_graph(trace)
+            _render_trace(trace)
         else:
             _empty_state("No proof trace yet", "Select the agents you want and click Run agents to create the APEC-PS support, attack, warrant, claim, and validation events.")
 
@@ -3960,6 +4435,9 @@ def main() -> None:
 
     elif step == "Agentic AI":
         _render_agentic_ai_upgrade()
+
+    elif step == "Argument Graphs":
+        _render_argument_graphs_page()
 
     elif step == "History":
         st.header("Persistent scan history")

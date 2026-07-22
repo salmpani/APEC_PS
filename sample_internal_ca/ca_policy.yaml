@@ -1,0 +1,13 @@
+service: internal-ca
+environment: academic-demo
+data_classification: employee_identity_data
+retention_years: 18
+certificate_signature: SHA1-RSA
+certificate_family: RSA-2048
+tls_key_exchange: ECDHE-RSA
+owners:
+  security: pki-team@example.edu
+  application: identity-platform@example.edu
+notes:
+  - Demonstrates long-lived identity data protected by legacy certificate settings.
+  - Intended only for APEC-PS PQC triage demonstrations.
