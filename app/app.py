@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Set, Tuple
@@ -31,13 +32,32 @@ from apecps import ProofEvent, ProofTrace, create_event
 from scanner import scan_endpoints, scan_repository
 
 
-SEVERITY_COLORS = {"high": "#dc2626", "medium": "#d97706", "low": "#059669"}
+SEVERITY_COLORS = {"high": "#fecaca", "medium": "#fed7aa", "low": "#bbf7d0"}
+SEVERITY_BORDER_COLORS = {"high": "#dc2626", "medium": "#d97706", "low": "#059669"}
+AI_PROVENANCE_COLOR = "#dbeafe"
+GRAPH_LAYOUT_DESCRIPTIONS = {
+    "Hierarchical": "Fixed left-to-right proof structure. Best for explaining the reasoning chain from evidence to review.",
+    "Force-directed": "Physics-based network. Nodes spread out dynamically, making clusters and dense relations easier to explore.",
+    "Timeline": "Rows by proof-event kind. Best for showing how premises, supports, attacks, claims, and validations differ.",
+}
+GROUP_REPEATED_HELP = (
+    "Combines repeated premise nodes with the same algorithm, severity, and finding type into one grouped node. "
+    "Turn it off when you need to inspect every individual scanner finding."
+)
+PHYSICS_LAYOUT_HELP = (
+    "Applies only to Force-directed layout. When on, nodes move into a balanced network; when off, the graph is more static."
+)
 KIND_COLORS = {
     "premise": "#2563eb",
     "support": "#16a34a",
     "attack": "#dc2626",
     "warrant": "#7c3aed",
     "claim": "#0f766e",
+    "validation": "#334155",
+}
+MAIN_EVENT_COLORS = {
+    "support": "#16a34a",
+    "attack": "#dc2626",
     "validation": "#334155",
 }
 KIND_ICONS = {
@@ -48,6 +68,30 @@ KIND_ICONS = {
     "claim": "[plan]",
     "validation": "[review]",
 }
+EDGE_MOVE_LABELS = {
+    "premise": "evidence link",
+    "support": "support relation",
+    "attack": "attack relation",
+    "warrant": "warrant link",
+    "claim": "claim link",
+    "validation": "validation link",
+}
+EDGE_MOVE_DESCRIPTIONS = {
+    "premise": "Evidence link: this referenced event provides source evidence or provenance for the target proof-event.",
+    "support": "Support relation: the target proof-event strengthens, elaborates, or grounds the referenced event.",
+    "attack": "Attack relation: the target proof-event challenges the referenced event, usually as a rebuttal, undercut, or undermining move.",
+    "warrant": "Warrant link: the target proof-event explains the reasoning rule that connects evidence to a claim.",
+    "claim": "Claim link: the target proof-event proposes a decision, conclusion, or mitigation plan based on referenced events.",
+    "validation": "Validation link: the target proof-event records review, acceptance, rejection, deferral, or risk acceptance for the referenced event.",
+}
+EDGE_MOVE_COLORS = {
+    "support": "#16a34a",
+    "attack": "#dc2626",
+    "warrant": "#7c3aed",
+    "claim": "#0f766e",
+    "validation": "#334155",
+    "premise": "#94a3b8",
+}
 AI_ROLE_AGENTS = {
     "risk_claim": "AI Risk Analyst",
     "supporting_argument": "AI Evidence Analyst",
@@ -55,6 +99,27 @@ AI_ROLE_AGENTS = {
     "counterargument": "AI Compatibility Critic",
     "human_review_request": "AI Trust Reviewer",
 }
+AI_ROLE_KINDS = {
+    "risk_claim": "claim",
+    "supporting_argument": "support",
+    "migration_recommendation": "warrant",
+    "counterargument": "attack",
+    "human_review_request": "validation",
+}
+AI_ROLE_DESCRIPTIONS = {
+    "risk_claim": "Identifies the main PQC risk claim from evidence and specialist-agent output.",
+    "supporting_argument": "Grounds the risk claim in scanner findings, premises, and supporting events.",
+    "migration_recommendation": "Turns the accepted risk into a staged mitigation warrant or plan.",
+    "counterargument": "Challenges unsafe migration assumptions, weak evidence, and compatibility risk.",
+    "human_review_request": "Checks whether the AI argument is ready for human consensus or still blocked.",
+}
+CORE_SPECIALIST_AGENT_NAMES = [
+    "CryptoDiscoveryAgent",
+    "QuantumRiskAgent",
+    "CompatibilityAgent",
+    "MigrationPlannerAgent",
+    "HumanReviewAgent",
+]
 
 
 APP_TITLE = "APEC-PS"
@@ -472,8 +537,12 @@ st.markdown(
 
 
 def _severity_html(severity: str) -> str:
-    color = SEVERITY_COLORS.get(severity, "#64748b")
-    return f"<span class='risk-pill' style='background:{color}'>{severity.upper()}</span>"
+    color = SEVERITY_COLORS.get(severity, "#e2e8f0")
+    border = SEVERITY_BORDER_COLORS.get(severity, "#64748b")
+    return (
+        f"<span class='risk-pill' style='background:{color};border:1px solid {border};"
+        f"color:{border}'>{severity.upper()}</span>"
+    )
 
 
 def _metric_card(label: str, value: Any, note: str = "", accent: str = "#0ea5e9") -> None:
@@ -749,16 +818,22 @@ def _save_review(finding_id: str, status: str, reviewer: str, reason: str, expir
 
 
 def _append_review_event(trace: ProofTrace, finding: Dict[str, Any], review: Dict[str, Any]) -> None:
+    linked_events = _finding_trace_events(finding, trace)
+    claim_targets = [event for event in linked_events if event.kind == "claim"]
+    warrant_targets = [event for event in linked_events if event.kind == "warrant"]
+    premise_targets = [event for event in linked_events if event.kind == "premise"]
+    target = (claim_targets or warrant_targets or premise_targets or [None])[-1]
     trace.add_event(
         create_event(
             actor="HumanReviewAgent",
             kind="validation",
             claim=f"Finding {finding.get('algorithm')} marked {review['status']} by {review['reviewer']}: {review['reason']}",
-            references=[],
+            references=[target.id] if target else [],
             finding_id=finding.get("finding_id"),
             status=review["status"],
             reviewer=review["reviewer"],
             expires_on=review.get("expires_on"),
+            decision_type="human_disposition",
         )
     )
 
@@ -768,6 +843,25 @@ def _run_agent_pipeline(findings: List[Dict[str, Any]], agents: List[Any] | None
     for agent in agents or ALL_AGENTS:
         agent.evaluate(findings, trace)
     return trace
+
+
+def _agents_by_name(names: Iterable[str]) -> List[Any]:
+    requested = set(names)
+    return [agent for agent in ALL_AGENTS if agent.name in requested]
+
+
+def _selected_specialist_agents() -> List[Any]:
+    selected_names = st.session_state.get("enabled_specialist_agents")
+    if not selected_names:
+        selected_names = CORE_SPECIALIST_AGENT_NAMES
+    return _agents_by_name(selected_names)
+
+
+def _selected_ai_roles() -> List[str]:
+    selected_roles = st.session_state.get("enabled_ai_roles")
+    if not selected_roles:
+        selected_roles = list(AI_ROLE_AGENTS)
+    return [role for role in AI_ROLE_AGENTS if role in set(selected_roles)]
 
 
 def _severity_counts(findings: List[Dict[str, Any]]) -> Dict[str, int]:
@@ -954,6 +1048,7 @@ def _render_agent_conversation(trace: ProofTrace, events: List[Any] | None = Non
         return
 
     events_by_id = {event.id: event for event in trace.events}
+    display_ids = _event_display_id_map(trace)
     if not compact:
         st.caption("Readable transcript of how agents move from evidence to challenge, plan, and human review.")
         actors = sorted({event.actor for event in conversation_events})
@@ -1209,9 +1304,9 @@ def _render_dashboard() -> None:
 
 def _render_demo_mode() -> None:
     st.header("Demo Mode")
-    st.write("Run a complete academic-demo scenario with a selected built-in repository.")
-    st.caption("This loads the selected scenario, scans it, runs all deterministic agents, saves a history snapshot, and prepares reports in one click.")
-    _render_presentation_walkthrough()
+    st.caption("Run a complete scenario with scanner findings, specialist agents, optional Agentic AI debate, graph, and reports.")
+    with st.expander("Guided presentation walkthrough", expanded=False):
+        _render_presentation_walkthrough()
 
     scenario_name = st.selectbox(
         "Demo scenario",
@@ -1223,24 +1318,60 @@ def _render_demo_mode() -> None:
     _section_card(str(scenario["summary"]), str(scenario["presentation_angle"]))
     c1, c2, c3 = st.columns(3)
     c1.metric("Demo repository", sample_path.name)
-    c2.metric("Agents", len(ALL_AGENTS))
-    c3.metric("Output", "Findings + Trace + Reports")
+    c2.metric("Core agents", len(CORE_SPECIALIST_AGENT_NAMES))
+    c3.metric("Output", "Trace + Reports")
+    o1, o2 = st.columns(2)
+    with o1:
+        run_agentic_quick = st.checkbox(
+            "Agentic AI quick run",
+            value=True,
+            help="Adds AI role-agent arguments and debate-response nodes using the deterministic coordinator for a fast demo.",
+        )
+    with o2:
+        show_demo_graph = st.checkbox(
+            "Show argument graph after run",
+            value=True,
+            help="Displays the generated APEC-PS graph directly in Demo Mode.",
+        )
     if st.button("Run selected demo scenario", type="primary"):
         if not sample_path.exists():
             st.error(f"Demo scenario path is missing: {sample_path}")
             return
         with st.spinner("Running demo scan and agent pipeline"):
             findings = scan_repository(str(sample_path), max_workers=4)
-            trace = _run_agent_pipeline(findings)
+            selected_agents = _agents_by_name(CORE_SPECIALIST_AGENT_NAMES)
+            trace = _run_agent_pipeline(findings, selected_agents)
+            ai_events: List[ProofEvent] = []
+            debate_events: List[ProofEvent] = []
+            if run_agentic_quick:
+                payload = _filter_ai_payload_roles(
+                    _deterministic_ai_argument_payload(findings, trace),
+                    list(AI_ROLE_AGENTS),
+                )
+                ai_events = _append_structured_ai_events(
+                    trace,
+                    findings,
+                    payload,
+                    actor="DemoCoordinatorAgent",
+                    provider="Deterministic quick run",
+                    model="demo",
+                )
+                debate_events = _append_ai_debate_rounds(trace, ai_events, 3, "Deterministic quick run", "demo")
+                st.session_state.llm_agentic_analysis = _format_ai_argument_payload(payload)
+                st.session_state.ai_argument_event_ids = [event.id for event in ai_events + debate_events]
+                st.session_state.quick_agentic_coordinator = "DemoCoordinatorAgent"
+                st.session_state.llm_agentic_source = "Demo Agentic AI quick run"
             st.session_state.repo_path = str(sample_path)
             st.session_state.repo_source = f"demo:{scenario_name}"
             st.session_state.findings = findings
             st.session_state.proof_trace = trace
+            st.session_state.demo_show_graph = show_demo_graph
             st.session_state.project_name = str(scenario["project_name"])
             st.session_state.demo_scenario = scenario_name
             scan_id = _save_scan(str(scenario["project_name"]), f"demo:{sample_path}", findings, trace)
             st.session_state.last_scan_id = scan_id
-        st.success(f"{scenario_name} ready: {len(findings)} findings and {len(trace.events)} proof events.")
+        extra = f", including {len(ai_events)} AI role nodes and {len(debate_events)} debate nodes" if run_agentic_quick else ""
+        st.success(f"{scenario_name} ready: {len(findings)} findings and {len(trace.events)} proof events{extra}.")
 
     findings = st.session_state.get("findings", [])
     trace = st.session_state.get("proof_trace")
@@ -1253,7 +1384,7 @@ def _render_demo_mode() -> None:
         with d2:
             _metric_card("High risks", severity["high"], "priority issues", "#dc2626")
         with d3:
-            _metric_card("Agents", len(ALL_AGENTS), "pipeline executed", "#b516b5")
+            _metric_card("Core agents", len(CORE_SPECIALIST_AGENT_NAMES), "pipeline executed", "#b516b5")
         with d4:
             _metric_card("Proof events", len(trace.events), "APEC-PS trace", "#059669")
         with d5:
@@ -1267,12 +1398,28 @@ def _render_demo_mode() -> None:
         university_markdown = _build_university_markdown_report(findings, trace)
         university_html = _build_university_html_report(findings, trace, graph_html)
 
-        report_tab, decision_tab, secure_tab = st.tabs(
-            ["Report downloads", "Finding-to-decision", "PQC secure exchange"]
+        graph_tab, decision_tab, report_tab, secure_tab = st.tabs(
+            ["Argument graph", "Finding-to-decision", "Reports", "PQC secure exchange"]
         )
+        with graph_tab:
+            if st.session_state.get("demo_show_graph", True) and trace:
+                _render_graph(trace)
+                with st.expander("Temporal predicates", expanded=False):
+                    _render_temporal_predicates(trace)
+                with st.expander("Proof-event trace", expanded=False):
+                    st.caption("This table is the formal APEC-PS trace behind the graph: event id, actor, move type, claim, references, and metadata.")
+                    _render_trace(trace)
+            elif graph_html:
+                st.download_button("Download Standalone Graph HTML", graph_html, file_name="demo_apecps_argument_graph.html", mime="text/html")
+            else:
+                st.info("Enable the argument graph option and rerun the demo to preview the graph here.")
+        with decision_tab:
+            enriched = _attach_operational_metadata(findings)
+            top_finding = sorted(enriched, key=lambda item: item.get("risk_score", 0), reverse=True)[0]
+            _render_finding_to_decision(top_finding, trace)
         with report_tab:
             st.markdown(
-                "<div class='download-card'><h4>Academic Report</h4><p>Formal academic-style report for your presentation or submission.</p></div>",
+                "<div class='download-card'><h4>Academic Report</h4><p>Formal method-oriented report for a paper, thesis, or presentation.</p></div>",
                 unsafe_allow_html=True,
             )
             u1, u2, u3 = st.columns(3)
@@ -1292,12 +1439,16 @@ def _render_demo_mode() -> None:
                 else:
                     st.info("PDF export is available when reportlab is installed.")
             st.divider()
+            st.markdown(
+                "<div class='download-card'><h4>Operational Report</h4><p>Security-facing triage report with findings, remediation playbooks, review state, and proof-event evidence.</p></div>",
+                unsafe_allow_html=True,
+            )
             r1, r2, r3 = st.columns(3)
             with r1:
-                st.download_button("Download Markdown", markdown, file_name="demo_pqc_risk_report.md", mime="text/markdown")
+                st.download_button("Download Operational Markdown", markdown, file_name="demo_operational_pqc_risk_report.md", mime="text/markdown")
                 st.download_button("Download JSON", json_export, file_name="demo_pqc_risk_report.json", mime="application/json")
             with r2:
-                st.download_button("Download HTML Report + Graph", html_report, file_name="demo_pqc_risk_report_with_graph.html", mime="text/html")
+                st.download_button("Download Operational HTML + Graph", html_report, file_name="demo_operational_pqc_risk_report_with_graph.html", mime="text/html")
                 st.download_button("Download SARIF", sarif_export, file_name="demo_pqc_risk_report.sarif", mime="application/sarif+json")
             with r3:
                 pdf_bytes = _build_pdf_report(
@@ -1306,14 +1457,10 @@ def _render_demo_mode() -> None:
                     trace,
                 )
                 if pdf_bytes:
-                    st.download_button("Download PDF", pdf_bytes, file_name="demo_pqc_risk_report.pdf", mime="application/pdf")
+                    st.download_button("Download Operational PDF", pdf_bytes, file_name="demo_operational_pqc_risk_report.pdf", mime="application/pdf")
                 if graph_html:
                     st.download_button("Download Standalone Graph HTML", graph_html, file_name="demo_apecps_argument_graph.html", mime="text/html")
             _render_polished_report_preview(findings, trace)
-        with decision_tab:
-            enriched = _attach_operational_metadata(findings)
-            top_finding = sorted(enriched, key=lambda item: item.get("risk_score", 0), reverse=True)[0]
-            _render_finding_to_decision(top_finding, trace)
         with secure_tab:
             _render_pqc_report_export(html_report, json_export)
 
@@ -1646,10 +1793,11 @@ def _run_openai_compatible_analysis(
     api_key: str,
     model: str,
     base_url: str | None = None,
+    enabled_roles: List[str] | None = None,
 ) -> str:
     from openai import OpenAI
 
-    prompt = _agentic_prompt_payload(findings, trace)
+    prompt = _agentic_prompt_payload(findings, trace, enabled_roles=enabled_roles)
     client_kwargs: Dict[str, Any] = {"api_key": api_key}
     if base_url:
         client_kwargs["base_url"] = base_url
@@ -1669,17 +1817,30 @@ def _run_openai_compatible_analysis(
     return response.choices[0].message.content or ""
 
 
-def _run_llm_agentic_analysis(findings: List[Dict[str, Any]], trace: ProofTrace | None, api_key: str, model: str) -> str:
-    return _run_openai_compatible_analysis(findings, trace, api_key, model)
+def _run_llm_agentic_analysis(
+    findings: List[Dict[str, Any]],
+    trace: ProofTrace | None,
+    api_key: str,
+    model: str,
+    enabled_roles: List[str] | None = None,
+) -> str:
+    return _run_openai_compatible_analysis(findings, trace, api_key, model, enabled_roles=enabled_roles)
 
 
-def _run_groq_agentic_analysis(findings: List[Dict[str, Any]], trace: ProofTrace | None, api_key: str, model: str) -> str:
+def _run_groq_agentic_analysis(
+    findings: List[Dict[str, Any]],
+    trace: ProofTrace | None,
+    api_key: str,
+    model: str,
+    enabled_roles: List[str] | None = None,
+) -> str:
     return _run_openai_compatible_analysis(
         findings,
         trace,
         api_key,
         model,
         base_url="https://api.groq.com/openai/v1",
+        enabled_roles=enabled_roles,
     )
 
 
@@ -1687,7 +1848,9 @@ def _agentic_prompt_payload(
     findings: List[Dict[str, Any]],
     trace: ProofTrace | None,
     finding_limit: int = 20,
+    enabled_roles: List[str] | None = None,
 ) -> Dict[str, Any]:
+    enabled_roles = [role for role in (enabled_roles or list(AI_ROLE_AGENTS)) if role in AI_ROLE_AGENTS]
     prioritized_findings = sorted(
         _attach_operational_metadata(findings),
         key=lambda finding: finding.get("risk_score", 0),
@@ -1734,11 +1897,8 @@ def _agentic_prompt_payload(
             "Do not claim that changes were executed.",
         ],
         "required_roles": [
-            {"role": "risk_claim", "kind": "claim", "ai_agent": AI_ROLE_AGENTS["risk_claim"]},
-            {"role": "supporting_argument", "kind": "support", "ai_agent": AI_ROLE_AGENTS["supporting_argument"]},
-            {"role": "migration_recommendation", "kind": "warrant", "ai_agent": AI_ROLE_AGENTS["migration_recommendation"]},
-            {"role": "counterargument", "kind": "attack", "ai_agent": AI_ROLE_AGENTS["counterargument"]},
-            {"role": "human_review_request", "kind": "validation", "ai_agent": AI_ROLE_AGENTS["human_review_request"]},
+            {"role": role, "kind": AI_ROLE_KINDS[role], "ai_agent": AI_ROLE_AGENTS[role]}
+            for role in enabled_roles
         ],
         "schema": {
             "summary": "short decision brief",
@@ -1802,7 +1962,7 @@ def _deterministic_quick_analysis(findings: List[Dict[str, Any]], trace: ProofTr
             f"**Recommended sequence:** {plans[-1] if plans else 'Inventory owners, test a hybrid migration, and require approval before production rollout.'}",
             "**Human decision:** Confirm the system owner, data-retention requirement, compatibility test scope, and migration deadline.",
             "",
-            "_Generated by the deterministic coordinator because a local LLM was unavailable._",
+            "_Generated by the deterministic coordinator because no configured LLM backend was available._",
         ]
     )
 
@@ -1875,8 +2035,25 @@ def _deterministic_ai_argument_payload(findings: List[Dict[str, Any]], trace: Pr
     }
 
 
-def _parse_ai_argument_payload(raw_response: str, findings: List[Dict[str, Any]], trace: ProofTrace) -> Dict[str, Any]:
-    fallback = _deterministic_ai_argument_payload(findings, trace)
+def _filter_ai_payload_roles(payload: Dict[str, Any], enabled_roles: List[str] | None) -> Dict[str, Any]:
+    if not enabled_roles:
+        return payload
+    allowed = set(enabled_roles)
+    filtered = dict(payload)
+    filtered["arguments"] = [
+        argument for argument in payload.get("arguments", []) if argument.get("role") in allowed
+    ]
+    return filtered
+
+
+def _parse_ai_argument_payload(
+    raw_response: str,
+    findings: List[Dict[str, Any]],
+    trace: ProofTrace,
+    enabled_roles: List[str] | None = None,
+) -> Dict[str, Any]:
+    enabled_roles = [role for role in (enabled_roles or list(AI_ROLE_AGENTS)) if role in AI_ROLE_AGENTS]
+    fallback = _filter_ai_payload_roles(_deterministic_ai_argument_payload(findings, trace), enabled_roles)
     cleaned = raw_response.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1]
@@ -1889,13 +2066,7 @@ def _parse_ai_argument_payload(raw_response: str, findings: List[Dict[str, Any]]
         fallback["summary"] = raw_response.strip() or fallback["summary"]
         return fallback
 
-    required = {
-        "risk_claim": "claim",
-        "supporting_argument": "support",
-        "migration_recommendation": "warrant",
-        "counterargument": "attack",
-        "human_review_request": "validation",
-    }
+    required = {role: AI_ROLE_KINDS[role] for role in enabled_roles}
     fallback_by_role = {item["role"]: item for item in fallback["arguments"]}
     supplied_by_role = {
         item.get("role"): item
@@ -2024,6 +2195,7 @@ def _append_structured_ai_events(
             severity=argument.get("severity"),
             confidence=argument.get("confidence"),
             argument_role=role,
+            type="undercut" if argument["kind"] == "attack" else argument["kind"],
             ai_role_agent=event_actor,
             coordinator_actor=actor,
             evidence_finding_ids=evidence_ids,
@@ -2038,6 +2210,10 @@ def _append_structured_ai_events(
             review_status="pending_review",
             status="approval_required" if role == "human_review_request" else "pending_review",
         )
+        if event.kind == "attack" and event.metadata.get("type") and not str(event.metadata.get("type")).startswith("attack_"):
+            event.metadata.setdefault("attack_type", event.metadata.get("type"))
+        event.metadata["apec_type"] = _apec_event_type(event)
+        event.metadata["type"] = event.metadata["apec_type"]
         trace.add_event(event)
         created.append(event)
         by_role[role] = event
@@ -2053,16 +2229,117 @@ def _append_structured_ai_events(
     return created
 
 
+def _append_ai_debate_rounds(
+    trace: ProofTrace,
+    ai_events: List[ProofEvent],
+    debate_rounds: int,
+    provider: str,
+    model: str,
+) -> List[ProofEvent]:
+    if debate_rounds < 2 or not ai_events:
+        return []
+    by_role = {event.metadata.get("argument_role"): event for event in ai_events}
+    debate_events: List[ProofEvent] = []
+    generated_at = datetime.now(timezone.utc).isoformat()
+
+    risk = by_role.get("risk_claim")
+    support = by_role.get("supporting_argument")
+    plan = by_role.get("migration_recommendation")
+    counter = by_role.get("counterargument")
+    review = by_role.get("human_review_request")
+
+    if debate_rounds >= 2 and counter and (risk or support):
+        target = risk or support
+        event = create_event(
+            actor="AI Compatibility Critic",
+            kind="attack",
+            claim="Debate round 2: the risk may be valid, but execution should be blocked until compatibility, certificate-chain, rollback, and client-impact evidence is reviewed.",
+            references=[target.id],
+            type="undercut",
+            severity=counter.metadata.get("severity", "medium"),
+            confidence=counter.metadata.get("confidence", 0.78),
+            argument_role="debate_counterargument",
+            ai_generated=True,
+            provenance="debate_round",
+            provider=provider,
+            model=model,
+            generated_at=generated_at,
+            debate_round=2,
+            review_status="pending_review",
+        )
+        trace.add_event(event)
+        debate_events.append(event)
+
+    if debate_rounds >= 3 and plan:
+        references = [plan.id] + [event.id for event in debate_events if event.kind == "attack"]
+        event = create_event(
+            actor="AI Migration Planner",
+            kind="claim",
+            claim="Debate round 3: revise the recommendation into staged mitigation with inventory ownership, hybrid/PQC testing, compatibility gates, rollback planning, and human approval before production change.",
+            references=references,
+            severity=plan.metadata.get("severity", "medium"),
+            confidence=plan.metadata.get("confidence", 0.8),
+            argument_role="debate_revision",
+            ai_generated=True,
+            provenance="debate_round",
+            provider=provider,
+            model=model,
+            generated_at=generated_at,
+            debate_round=3,
+            review_status="pending_review",
+        )
+        trace.add_event(event)
+        debate_events.append(event)
+
+    if debate_rounds >= 3 and review:
+        target = debate_events[-1] if debate_events else review
+        event = create_event(
+            actor="AI Trust Reviewer",
+            kind="validation",
+            claim="Debate consensus: the AI argument is acceptable only as a reviewed triage recommendation; remediation remains gated by human confirmation and unresolved-evidence checks.",
+            references=[target.id, review.id] if target.id != review.id else [review.id],
+            severity=review.metadata.get("severity", "medium"),
+            confidence=review.metadata.get("confidence", 0.88),
+            argument_role="debate_consensus",
+            ai_generated=True,
+            provenance="debate_round",
+            provider=provider,
+            model=model,
+            generated_at=generated_at,
+            debate_round=3,
+            review_status="requires_human_consensus",
+            status="human_consensus_required",
+        )
+        trace.add_event(event)
+        debate_events.append(event)
+
+    refreshed_by_id = {event.id: event for event in trace.events}
+    for event in debate_events:
+        if event.kind == "attack" and event.metadata.get("type") and not str(event.metadata.get("type")).startswith("attack_"):
+            event.metadata.setdefault("attack_type", event.metadata.get("type"))
+        event.metadata["apec_type"] = _apec_event_type(event)
+        event.metadata["type"] = event.metadata["apec_type"]
+        score, maximum, checks = _ai_trust_score(event, ai_events + debate_events, refreshed_by_id)
+        event.metadata["trust_score"] = score
+        event.metadata["trust_score_max"] = maximum
+        event.metadata["trust_checks"] = checks
+    return debate_events
+
+
 def _run_ollama_agentic_analysis(
     findings: List[Dict[str, Any]],
     trace: ProofTrace | None,
     base_url: str,
     model: str,
     finding_limit: int = 20,
+    enabled_roles: List[str] | None = None,
 ) -> str:
     prompt = (
         "You are a careful security architecture agent. Be precise, auditable, and concise.\n\n"
-        + json.dumps(_agentic_prompt_payload(findings, trace, finding_limit=finding_limit), indent=2)
+        + json.dumps(
+            _agentic_prompt_payload(findings, trace, finding_limit=finding_limit, enabled_roles=enabled_roles),
+            indent=2,
+        )
     )
     endpoint = base_url.rstrip("/") + "/api/generate"
     payload = json.dumps(
@@ -2111,28 +2388,88 @@ def _render_agentic_ai_upgrade() -> None:
         st.info("Run Demo Mode or a scan first so the Agentic AI coordinator has evidence to analyze.")
         return
 
+    agent_names = [agent.name for agent in ALL_AGENTS]
+    if "enabled_specialist_agents" not in st.session_state:
+        st.session_state.enabled_specialist_agents = list(CORE_SPECIALIST_AGENT_NAMES)
+    if "enabled_ai_roles" not in st.session_state:
+        st.session_state.enabled_ai_roles = list(AI_ROLE_AGENTS)
+
+    with st.expander("Agentic AI workflow configuration", expanded=True):
+        st.write(
+            "The coordinator does not replace the agents. It selects evidence from specialist agents, asks chosen AI role agents "
+            "to argue over the case, and records their claims as APEC-PS proof events."
+        )
+        selected_specialist_names = st.multiselect(
+            "Specialist agents",
+            agent_names,
+            default=[name for name in st.session_state.enabled_specialist_agents if name in agent_names],
+            key="enabled_specialist_agents",
+            help="Use the smaller core set for a clearer agentic debate; add more agents when you need richer operational context.",
+        )
+        selected_ai_roles = st.multiselect(
+            "AI role agents",
+            list(AI_ROLE_AGENTS),
+            default=[role for role in st.session_state.enabled_ai_roles if role in AI_ROLE_AGENTS],
+            key="enabled_ai_roles",
+            format_func=lambda role: AI_ROLE_AGENTS[role],
+            help="The coordinator will request only these AI roles and store each selected role as a separate proof event.",
+        )
+        debate_rounds = st.select_slider(
+            "AI debate depth",
+            options=[1, 2, 3],
+            value=3,
+            format_func=lambda value: {
+                1: "1 round: role arguments",
+                2: "2 rounds: critique response",
+                3: "3 rounds: revision and consensus",
+            }[value],
+            key="agentic_debate_rounds",
+        )
+        if not selected_specialist_names:
+            st.warning("Select at least one specialist agent.")
+            return
+        if not selected_ai_roles:
+            st.warning("Select at least one AI role agent.")
+            return
+
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     installed_models = _ollama_models(ollama_url)
     default_model = os.environ.get("OLLAMA_MODEL", "llama3.2")
     selected_model = _select_ollama_model(installed_models, default_model)
     groq_key = _configured_secret("GROQ_API_KEY")
     groq_model = _configured_secret("GROQ_MODEL") or "openai/gpt-oss-20b"
-    automatic_provider = "Groq Cloud" if groq_key else "Local Ollama" if installed_models else "Deterministic"
+    automatic_provider = "Groq Cloud" if groq_key else "Ollama endpoint" if installed_models else "Deterministic fallback"
     automatic_model = groq_model if groq_key else selected_model if installed_models else "fallback"
     status_col, scope_col, mode_col = st.columns(3)
     status_col.metric("AI backend", "Ready" if installed_models or groq_key else "Fallback")
-    scope_col.metric("Specialist agents", len(ALL_AGENTS))
+    scope_col.metric("Specialist agents", len(selected_specialist_names))
     mode_col.metric("Coordinator", automatic_provider)
     mode_col.caption(automatic_model)
     if groq_key:
         st.success(f"Hosted coordinator ready: Groq Cloud / {groq_model}")
     elif installed_models:
-        st.success(f"Local coordinator ready: {selected_model}")
+        st.success(f"Ollama endpoint ready: {selected_model}")
     else:
         st.warning(
             "No LLM provider is configured. The central workflow will use the deterministic coordinator. "
             "For Streamlit Cloud, add GROQ_API_KEY in app secrets."
         )
+    st.markdown(
+        f"""
+        <div class="section-card">
+          <h3 style="margin-top:0;color:#07185f;">AI Coordinator</h3>
+          <p style="margin:0 0 8px 0;color:#334155;">
+            <b>{html.escape(automatic_provider)}</b> coordinates selected AI role agents using model
+            <b>{html.escape(str(automatic_model))}</b>.
+          </p>
+          <p style="margin:0;color:#64748b;">
+            The coordinator synthesizes specialist-agent evidence, requests role-specific AI arguments,
+            links each AI move to proof-event references, and leaves remediation gated by human consensus.
+          </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     with st.expander("AI role agents and trust controls", expanded=True):
         st.write(
@@ -2152,38 +2489,42 @@ def _render_agentic_ai_upgrade() -> None:
                 "Trust rule": "Must be evidence-linked, confidence-scored, counterargument-aware, and human-reviewed.",
             }
             for role, agent_name in AI_ROLE_AGENTS.items()
+            if role in selected_ai_roles
         ]
         st.dataframe(pd.DataFrame(role_rows), use_container_width=True, hide_index=True)
 
     if st.button("Run Agentic AI Analysis", type="primary", use_container_width=True):
         progress = st.progress(0, text="Running specialist agents")
         trace = ProofTrace()
-        for index, agent in enumerate(ALL_AGENTS, start=1):
+        selected_specialist_agents = _agents_by_name(selected_specialist_names)
+        total_steps = len(selected_specialist_agents) + 1
+        for index, agent in enumerate(selected_specialist_agents, start=1):
             agent.evaluate(findings, trace)
-            progress.progress(index / (len(ALL_AGENTS) + 1), text=f"Completed {agent.name}")
+            progress.progress(index / total_steps, text=f"Completed {agent.name}")
 
         coordinator = "DeterministicCoordinator"
-        provider_name = "Local fallback"
+        provider_name = "Deterministic fallback"
         model_name = "deterministic"
         provider_failure = ""
         try:
             if groq_key:
-                progress.progress(len(ALL_AGENTS) / (len(ALL_AGENTS) + 1), text=f"Coordinating with Groq / {groq_model}")
-                raw_analysis = _run_groq_agentic_analysis(findings, trace, groq_key, groq_model)
+                progress.progress(len(selected_specialist_agents) / total_steps, text=f"Coordinating with Groq / {groq_model}")
+                raw_analysis = _run_groq_agentic_analysis(findings, trace, groq_key, groq_model, enabled_roles=selected_ai_roles)
                 coordinator = "GroqCoordinatorAgent"
                 provider_name = "Groq Cloud"
                 model_name = groq_model
             elif installed_models:
-                progress.progress(len(ALL_AGENTS) / (len(ALL_AGENTS) + 1), text=f"Coordinating with {selected_model}")
+                progress.progress(len(selected_specialist_agents) / total_steps, text=f"Coordinating with {selected_model}")
                 raw_analysis = _run_ollama_agentic_analysis(
                     findings,
                     trace,
                     ollama_url,
                     selected_model,
                     finding_limit=10,
+                    enabled_roles=selected_ai_roles,
                 )
                 coordinator = "OllamaCoordinatorAgent"
-                provider_name = "Local Ollama"
+                provider_name = "Ollama endpoint"
                 model_name = selected_model
             else:
                 raise RuntimeError("No LLM provider is configured")
@@ -2191,9 +2532,9 @@ def _render_agentic_ai_upgrade() -> None:
                 raise RuntimeError(f"{provider_name} returned an empty response")
         except Exception as exc:
             provider_failure = str(exc)
-            raw_analysis = json.dumps(_deterministic_ai_argument_payload(findings, trace))
+            raw_analysis = json.dumps(_filter_ai_payload_roles(_deterministic_ai_argument_payload(findings, trace), selected_ai_roles))
 
-        argument_payload = _parse_ai_argument_payload(raw_analysis, findings, trace)
+        argument_payload = _parse_ai_argument_payload(raw_analysis, findings, trace, enabled_roles=selected_ai_roles)
         analysis = _format_ai_argument_payload(argument_payload)
         ai_events = _append_structured_ai_events(
             trace,
@@ -2203,9 +2544,10 @@ def _render_agentic_ai_upgrade() -> None:
             provider=provider_name,
             model=model_name,
         )
+        debate_events = _append_ai_debate_rounds(trace, ai_events, debate_rounds, provider_name, model_name)
         st.session_state.proof_trace = trace
         st.session_state.llm_agentic_analysis = analysis
-        st.session_state.ai_argument_event_ids = [event.id for event in ai_events]
+        st.session_state.ai_argument_event_ids = [event.id for event in ai_events + debate_events]
         st.session_state.quick_agentic_coordinator = coordinator
         st.session_state.llm_agentic_source = f"Agentic AI Analysis - {provider_name} - {model_name}"
         scan_id = _save_scan(
@@ -2217,8 +2559,8 @@ def _render_agentic_ai_upgrade() -> None:
         st.session_state.last_scan_id = scan_id
         progress.progress(1.0, text="Agentic AI analysis complete")
         st.success(
-            f"Completed {len(ALL_AGENTS)} specialist agents with {provider_name}, "
-            f"creating {len(ai_events)} linked AI argument nodes."
+            f"Completed {len(selected_specialist_agents)} specialist agents with {provider_name}, "
+            f"creating {len(ai_events)} AI role nodes and {len(debate_events)} debate response nodes."
         )
         if provider_failure:
             st.warning(f"The configured LLM could not complete the request, so the deterministic fallback was used: {provider_failure}")
@@ -2227,7 +2569,7 @@ def _render_agentic_ai_upgrade() -> None:
         st.caption("Select a provider or model and append a separate structured coordinator opinion.")
         trace: ProofTrace | None = st.session_state.get("proof_trace")
         openai_key = _configured_secret("OPENAI_API_KEY")
-        provider_options = ["Groq Cloud", "Local Ollama", "OpenAI API"]
+        provider_options = ["Groq Cloud", "Ollama endpoint", "OpenAI API"]
         default_provider_index = 0
         provider = st.selectbox("LLM provider", provider_options, index=default_provider_index)
         if provider == "OpenAI API":
@@ -2262,6 +2604,10 @@ def _render_agentic_ai_upgrade() -> None:
             advanced_ollama_url = st.text_input("Ollama URL", value=ollama_url)
         append_to_trace = st.checkbox("Append structured AI arguments to proof trace", value=True)
         if st.button("Run Advanced Coordinator"):
+            advanced_roles = _selected_ai_roles()
+            if not advanced_roles:
+                st.warning("Select at least one AI role agent before running the advanced coordinator.")
+                return
             try:
                 with st.spinner("Calling Agentic AI coordinator"):
                     if provider == "OpenAI API":
@@ -2269,22 +2615,23 @@ def _render_agentic_ai_upgrade() -> None:
                         if not key:
                             st.warning("Add an API key or set OPENAI_API_KEY to run the OpenAI-backed agent.")
                             return
-                        raw_analysis = _run_llm_agentic_analysis(findings, trace, key, model.strip())
+                        raw_analysis = _run_llm_agentic_analysis(findings, trace, key, model.strip(), enabled_roles=advanced_roles)
                     elif provider == "Groq Cloud":
                         key = api_key_input.strip() or groq_key
                         if not key:
                             st.warning("Add a Groq API key or configure GROQ_API_KEY in Streamlit Secrets.")
                             return
-                        raw_analysis = _run_groq_agentic_analysis(findings, trace, key, model.strip())
+                        raw_analysis = _run_groq_agentic_analysis(findings, trace, key, model.strip(), enabled_roles=advanced_roles)
                     else:
                         raw_analysis = _run_ollama_agentic_analysis(
                             findings,
                             trace,
                             advanced_ollama_url.strip(),
                             model.strip(),
+                            enabled_roles=advanced_roles,
                         )
                 working_trace = trace or ProofTrace()
-                argument_payload = _parse_ai_argument_payload(raw_analysis, findings, working_trace)
+                argument_payload = _parse_ai_argument_payload(raw_analysis, findings, working_trace, enabled_roles=advanced_roles)
                 analysis = _format_ai_argument_payload(argument_payload)
                 st.session_state.llm_agentic_analysis = analysis
                 ai_events: List[ProofEvent] = []
@@ -2325,13 +2672,267 @@ def _render_agentic_ai_upgrade() -> None:
 
 
 def _flatten_events(trace: ProofTrace) -> List[Dict[str, Any]]:
+    display_ids = _event_display_id_map(trace)
+    temporal_by_id = {row["internal_event_id"]: row for row in _compute_temporal_predicates(trace, display_ids=display_ids)}
     rows: List[Dict[str, Any]] = []
     for event in trace.events:
         row = event.to_dict()
         metadata = row.pop("metadata", {})
+        apec_view = _apec_event_view(event, display_ids=display_ids)
         row.update(metadata)
-        row["references"] = ", ".join(row.get("references") or [])
+        row["internal_id"] = event.id
+        row["id"] = display_ids.get(event.id, event.id)
+        row["source_kind"] = event.kind
+        row["main_event"] = apec_view["main_event"]
+        row["type"] = apec_view["type"]
+        row["premises"] = "; ".join(apec_view["premises"])
+        row["warrant"] = apec_view["warrant"]
+        row["references"] = ", ".join(_display_refs(row.get("references") or [], display_ids))
+        temporal = temporal_by_id.get(event.id, {})
+        row["time"] = temporal.get("time")
+        row["fluent"] = temporal.get("fluent")
+        row["temporal_state"] = temporal.get("state")
+        row["Happens"] = temporal.get("Happens")
+        row["Initiates"] = temporal.get("Initiates")
+        row["ActiveAt"] = temporal.get("ActiveAt")
+        row["Clipped"] = temporal.get("Clipped")
+        row["Terminates"] = temporal.get("Terminates")
+        row["Valid"] = temporal.get("Valid")
         rows.append(row)
+    return rows
+
+
+def _event_display_id_map(trace: ProofTrace) -> Dict[str, str]:
+    return {event.id: f"PE{index}" for index, event in enumerate(trace.events, start=1)}
+
+
+def _display_refs(references: List[str] | None, display_ids: Dict[str, str]) -> List[str]:
+    return [display_ids.get(ref, ref) for ref in (references or [])]
+
+
+def _apec_main_event(event: ProofEvent) -> str:
+    if event.kind == "attack":
+        return "attack"
+    if event.kind == "validation":
+        return "validation"
+    return "support"
+
+
+def _apec_event_type(event: ProofEvent) -> str:
+    role = str(event.metadata.get("argument_role") or "")
+    raw_type = str(event.metadata.get("type") or "")
+    if raw_type.startswith(("support_", "attack_", "validation_")):
+        return raw_type
+    raw_attack_type = str(event.metadata.get("attack_type") or raw_type or "")
+    status = str(event.metadata.get("status") or event.metadata.get("review_status") or "")
+    if event.kind == "attack":
+        normalized_attack_types = {"undermin": "undermine", "undermine": "undermine", "undercut": "undercut", "rebut": "rebut"}
+        attack_type = normalized_attack_types.get(raw_attack_type, "undercut")
+        return f"attack_{attack_type}"
+    if event.kind == "validation":
+        if "false_positive" in status:
+            return "validation_reject"
+        if "accepted" in status or "approval" in status:
+            return "validation_accept"
+        if "defer" in status or "needs_review" in status or "required" in status:
+            return "validation_defer"
+        if "risk" in status:
+            return "validation_risk_accept"
+        return "validation_review"
+    if event.kind == "premise":
+        return "support_observation"
+    if event.kind == "warrant":
+        return "support_warrant"
+    if event.kind == "claim":
+        if role == "migration_recommendation":
+            return "support_strategy"
+        return "support_claim"
+    if event.kind == "support":
+        if role == "supporting_argument":
+            return "support_elaborate"
+        if role == "risk_claim":
+            return "support_claim"
+        return "support_elaborate"
+    return f"support_{event.kind}"
+
+
+def _apec_premises(event: ProofEvent, display_ids: Dict[str, str] | None = None) -> List[str]:
+    display_ids = display_ids or {}
+    premises: List[str] = []
+    evidence = event.metadata.get("evidence")
+    if evidence:
+        premises.append(str(evidence))
+    algorithm = event.metadata.get("algorithm")
+    severity = event.metadata.get("severity")
+    finding_type = event.metadata.get("type")
+    if event.kind == "premise" and algorithm:
+        premises.append(f"Scanner observed {algorithm} as {finding_type or 'cryptographic evidence'} with severity {severity or 'unknown'}.")
+    if event.references:
+        premises.append(f"References prior proof-event(s): {', '.join(_display_refs(event.references, display_ids))}.")
+    if not premises:
+        premises.append("The event is derived from the current APEC-PS trace context.")
+    return premises
+
+
+def _apec_warrant(event: ProofEvent) -> str:
+    if event.metadata.get("warrant"):
+        return str(event.metadata["warrant"])
+    if event.kind == "premise":
+        return "A scanner observation can initiate a support event when it provides inspectable evidence for triage."
+    if event.kind == "support":
+        return "A support event elaborates or strengthens a referenced finding, risk interpretation, or plan."
+    if event.kind == "warrant":
+        return "A warrant states the reasoning rule that connects premises to a migration conclusion."
+    if event.kind == "claim":
+        return "A claim proposes a decision, prioritization, or mitigation plan derived from referenced support and warrants."
+    if event.kind == "attack":
+        attack_type = _apec_event_type(event).replace("attack_", "")
+        return f"An {attack_type} attack challenges a premise, warrant, or conclusion in the referenced proof-event."
+    if event.kind == "validation":
+        return "A validation event records human or system disposition for a referenced claim or revised plan."
+    return "The event contributes to the APEC-PS proof trace."
+
+
+def _apec_event_view(event: ProofEvent, display_ids: Dict[str, str] | None = None) -> Dict[str, Any]:
+    return {
+        "main_event": _apec_main_event(event),
+        "type": _apec_event_type(event),
+        "source_kind": event.kind,
+        "premises": _apec_premises(event, display_ids=display_ids),
+        "warrant": _apec_warrant(event),
+        "claim": event.claim,
+    }
+
+
+def _event_to_apec_dict(event: ProofEvent, display_ids: Dict[str, str] | None = None) -> Dict[str, Any]:
+    display_ids = display_ids or {}
+    base = event.to_dict()
+    metadata = dict(base.get("metadata") or {})
+    previous_type = metadata.get("type")
+    if event.kind == "premise" and previous_type:
+        metadata.setdefault("finding_type", previous_type)
+    if event.kind == "attack" and previous_type:
+        metadata.setdefault("attack_type", previous_type)
+    view = _apec_event_view(event, display_ids=display_ids)
+    metadata.update(
+        {
+            "type": view["type"],
+            "source_kind": view["source_kind"],
+            "premises": view["premises"],
+            "warrant": view["warrant"],
+        }
+    )
+    base["kind"] = view["main_event"]
+    base["id"] = display_ids.get(event.id, event.id)
+    base["references"] = _display_refs(event.references or [], display_ids)
+    base["type"] = view["type"]
+    base["source_kind"] = view["source_kind"]
+    base["premises"] = view["premises"]
+    base["warrant"] = view["warrant"]
+    base["metadata"] = metadata
+    return base
+
+
+def _event_fluent(event: ProofEvent) -> str:
+    role = str(event.metadata.get("argument_role") or "")
+    if role:
+        return f"f_{role}"
+    return {
+        "premise": "f_crypto_evidence",
+        "support": "f_supported_risk",
+        "attack": "f_objection",
+        "warrant": "f_migration_warrant",
+        "claim": "f_migration_plan",
+        "validation": "f_review_validation",
+    }.get(event.kind, f"f_{event.kind}")
+
+
+def _compute_temporal_predicates(trace: ProofTrace, display_ids: Dict[str, str] | None = None) -> List[Dict[str, Any]]:
+    display_ids = display_ids or _event_display_id_map(trace)
+    events = trace.events
+    events_by_id = {event.id: event for event in events}
+    index_by_id = {event.id: index for index, event in enumerate(events, start=1)}
+    supports_by_target: Dict[str, List[ProofEvent]] = {event.id: [] for event in events}
+    attacks_by_target: Dict[str, List[ProofEvent]] = {event.id: [] for event in events}
+    validations_by_target: Dict[str, List[ProofEvent]] = {event.id: [] for event in events}
+
+    for event in events:
+        for ref in event.references or []:
+            if ref not in events_by_id:
+                continue
+            if event.kind == "attack":
+                attacks_by_target.setdefault(ref, []).append(event)
+            elif event.kind in {"support", "warrant", "claim"}:
+                supports_by_target.setdefault(ref, []).append(event)
+            elif event.kind == "validation":
+                validations_by_target.setdefault(ref, []).append(event)
+
+    rows: List[Dict[str, Any]] = []
+    for event in events:
+        t = f"t{index_by_id[event.id]}"
+        event_label = display_ids.get(event.id, event.id)
+        fluent = _event_fluent(event)
+        attacks = attacks_by_target.get(event.id, [])
+        undefeated_attacks = []
+        for attack in attacks:
+            counterattacks = [
+                candidate
+                for candidate in attacks_by_target.get(attack.id, [])
+                if index_by_id[candidate.id] >= index_by_id[attack.id]
+            ]
+            if not counterattacks:
+                undefeated_attacks.append(attack)
+        supports = supports_by_target.get(event.id, [])
+        validations = validations_by_target.get(event.id, [])
+        has_support = bool(supports or event.kind in {"premise", "support", "warrant", "claim", "validation"})
+        is_clipped = bool(undefeated_attacks)
+        is_active = has_support and not is_clipped
+        is_valid = is_active and (bool(supports or validations) or event.kind in {"premise", "validation"})
+        state = "valid" if is_valid else "terminated" if is_clipped else "active" if is_active else "pending"
+        attack_ids = [display_ids.get(attack.id, attack.id) for attack in undefeated_attacks]
+        support_ids = [display_ids.get(support.id, support.id) for support in supports]
+        validation_ids = [display_ids.get(validation.id, validation.id) for validation in validations]
+        rows.append(
+            {
+                "event_id": event_label,
+                "internal_event_id": event.id,
+                "actor": event.actor,
+                "kind": event.kind,
+                "time": t,
+                "fluent": fluent,
+                "state": state,
+                "Happens": f"Happens({event_label}, {t})",
+                "Initiates": (
+                    f"Initiates({event_label}, {fluent}, {t})"
+                    if has_support
+                    else "-"
+                ),
+                "ActiveAt": (
+                    f"ActiveAt({event_label}, {fluent}, {t})"
+                    if is_active
+                    else "-"
+                ),
+                "Clipped": (
+                    f"Clipped({event_label}, {fluent}, {t}) by {', '.join(attack_ids)}"
+                    if is_clipped
+                    else "-"
+                ),
+                "Terminates": (
+                    f"Terminates({event_label}, {fluent}, {t})"
+                    if is_clipped
+                    else "-"
+                ),
+                "Valid": (
+                    f"Valid({event_label}, {fluent}, {t})"
+                    if is_valid
+                    else "-"
+                ),
+                "supporting_events": ", ".join(support_ids) or "-",
+                "attacking_events": ", ".join(attack_ids) or "-",
+                "validation_events": ", ".join(validation_ids) or "-",
+                "claim": event.claim,
+            }
+        )
     return rows
 
 
@@ -2427,8 +3028,24 @@ def _build_markdown_report(
     include_citation: bool = True,
 ) -> str:
     findings = _attach_operational_metadata(findings)
+    severity = _severity_counts(findings)
+    total_score = sum(int(finding.get("risk_score") or 0) for finding in findings)
     lines = [
-        "# APEC-PS PQC Risk Report",
+        "# APEC-PS Operational PQC Risk Report",
+        "",
+        "## Operational Report Purpose",
+        "",
+        "This operational report is intended for security review and remediation tracking. "
+        "It summarizes detected cryptographic exposure, prioritizes findings, records the current review state, "
+        "and preserves the APEC-PS proof-event ledger needed to reconstruct the decision path.",
+        "",
+        "## Triage Summary",
+        "",
+        f"- Findings included: **{len(findings)}**",
+        f"- High severity: **{severity['high']}**",
+        f"- Medium severity: **{severity['medium']}**",
+        f"- Low severity: **{severity['low']}**",
+        f"- Aggregate risk score: **{total_score}**",
         "",
         "## Findings",
         "",
@@ -2455,10 +3072,20 @@ def _build_markdown_report(
                 lines.append(f"- {step}")
             lines.append("")
     if trace and include_proof_events:
+        lines.extend(
+            [
+                "",
+                "## Decision Interpretation",
+                "",
+                "The proof-event trace should be read as an operational decision record. Premise events capture scanner evidence; "
+                "support events explain why the evidence matters; attack events preserve objections; warrant and claim events propose migration logic; "
+                "validation events record review checkpoints rather than automatic remediation.",
+            ]
+        )
         lines.extend(["", "## Proof Events", ""])
         for event in trace.events:
             refs = ", ".join(event.references or [])
-            lines.append(f"- **{event.actor} / {event.kind}**: {event.claim} (refs: {refs or '-'})")
+            lines.append(f"- **{event.id} | {event.actor} / {event.kind}**: {event.claim} (refs: {refs or '-'})")
     if include_citation:
         lines.extend(["", "## Suggested Citation", "", PROJECT_CITATION])
     return "\n".join(lines) + "\n"
@@ -2504,6 +3131,10 @@ def _build_university_markdown_report(
         "agent reasoning, argumentation-based support and attack events, and human-review evidence into an "
         "auditable migration artefact.",
         "",
+        "Unlike the operational report, this academic report explains the method used to generate the result. "
+        "It is intended for research presentation, thesis documentation, and reviewer inspection of the APEC-PS "
+        "mapping from agent communication to proof-event traces.",
+        "",
         "## Methodology",
         "",
         "1. Repository, ZIP, GitHub, or TLS endpoint evidence is scanned for classical cryptographic exposure.",
@@ -2511,6 +3142,19 @@ def _build_university_markdown_report(
         "3. Deterministic APEC-PS agents convert findings into premises, support arguments, attacks, warrants, claims, and validations.",
         "4. The argument graph highlights which claims are supported, challenged, or still waiting for human review.",
         "5. Report exports preserve evidence for security review, research discussion, or incident documentation.",
+        "",
+        "## APEC-PS Interpretation",
+        "",
+        "In this prototype, scanner observations become premises, specialist-agent outputs become support, attack, "
+        "warrant, claim, or validation moves, and selected AI role agents add a coordinator-mediated argumentation layer. "
+        "The resulting trace is not only a workflow log. It is an argumentation trace that records why a PQC migration "
+        "decision was proposed, challenged, revised, or left for human review.",
+        "",
+        "## Trustworthy Agentic AI Controls",
+        "",
+        "The system separates deterministic specialist agents, selectable AI role agents, and human review. "
+        "Trust controls include evidence grounding, explicit attack typing, confidence scores, reference integrity, "
+        "human consensus over AI arguments, and export consistency across JSON, Markdown, report, and graph artifacts.",
         "",
         "## Executive Summary",
         "",
@@ -2561,7 +3205,7 @@ def _build_university_markdown_report(
         lines.append("")
         for event in trace_events[:20]:
             refs = ", ".join(event.references or [])
-            lines.append(f"- **{event.actor} / {event.kind}:** {event.claim} (refs: {refs or '-'})")
+            lines.append(f"- **{event.id} | {event.actor} / {event.kind}:** {event.claim} (refs: {refs or '-'})")
     elif include_proof_events:
         lines.append("No proof trace is attached. Run the Agents page to include support, attack, warrant, claim, and validation events.")
 
@@ -2673,6 +3317,24 @@ def _build_pdf_report(
     total_score = sum(int(finding.get("risk_score") or 0) for finding in enriched)
     trace_events = trace.events if trace and include_proof_events else []
 
+    if university:
+        story.append(Paragraph("Academic Report Purpose", styles["Heading1"]))
+        story.append(
+            para(
+                "This academic report explains the APEC-PS method behind the prototype output. "
+                "It is intended for research presentation, thesis documentation, and reviewer inspection of the mapping from agent communication to proof-event traces."
+            )
+        )
+    else:
+        story.append(Paragraph("Operational Report Purpose", styles["Heading1"]))
+        story.append(
+            para(
+                "This operational report supports security triage and remediation tracking. "
+                "It summarizes findings, review status, playbooks, and the proof-event ledger needed to reconstruct the decision path."
+            )
+        )
+    story.append(Spacer(1, 12))
+
     story.append(Paragraph("Executive Summary", styles["Heading1"]))
     summary_data = [
         [para("Metric", "Heading2"), para("Value", "Heading2")],
@@ -2709,6 +3371,22 @@ def _build_pdf_report(
         methodology_table = Table(methodology_rows, colWidths=[0.35 * inch, 6.55 * inch])
         methodology_table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
         story.append(methodology_table)
+        story.append(Spacer(1, 12))
+        story.append(Paragraph("APEC-PS Interpretation", styles["Heading1"]))
+        story.append(
+            para(
+                "Scanner observations are represented as premises; specialist-agent outputs become support, attack, warrant, claim, or validation moves; "
+                "and AI role-agent outputs add a coordinator-mediated argumentation layer. The trace is therefore an argumentation record, not only a workflow log."
+            )
+        )
+        story.append(Spacer(1, 8))
+        story.append(Paragraph("Trustworthy Agentic AI Controls", styles["Heading1"]))
+        story.append(
+            para(
+                "The prototype separates deterministic specialist agents, selectable AI role agents, and human review. "
+                "Trust controls include evidence grounding, attack typing, confidence scores, reference integrity, human consensus over AI arguments, and export consistency."
+            )
+        )
         story.append(Spacer(1, 12))
 
     story.append(Paragraph("Priority Findings", styles["Heading1"]))
@@ -2814,11 +3492,13 @@ def _build_pdf_report(
 
 
 def _build_json_export(findings: List[Dict[str, Any]], trace: ProofTrace | None) -> str:
+    display_ids = _event_display_id_map(trace) if trace else {}
     payload = {
         "schema": "apec-ps-pqc-report/v1",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "findings": _attach_operational_metadata(findings),
-        "proof_trace": trace.to_list() if trace else [],
+        "proof_trace": [_event_to_apec_dict(event, display_ids=display_ids) for event in trace.events] if trace else [],
+        "temporal_predicates": _compute_temporal_predicates(trace, display_ids=display_ids) if trace else [],
     }
     return json.dumps(payload, indent=2, sort_keys=True)
 
@@ -2890,9 +3570,27 @@ def _build_sarif_export(findings: List[Dict[str, Any]]) -> str:
 
 def _render_agent_selector() -> List[Any]:
     st.subheader("Agent pipeline")
-    st.caption("Choose which reasoning agents should contribute to the APEC-PS trace.")
+    st.caption("Choose which specialist agents should contribute to the deterministic APEC-PS trace. The default core set is intentionally smaller so each role is easier to explain.")
     agent_names = [agent.name for agent in ALL_AGENTS]
-    selected_names = st.multiselect("Enabled agents", agent_names, default=agent_names)
+    if "enabled_specialist_agents" not in st.session_state:
+        st.session_state.enabled_specialist_agents = list(CORE_SPECIALIST_AGENT_NAMES)
+    preset = st.radio(
+        "Specialist configuration",
+        ["Core debate agents", "All specialist agents", "Custom"],
+        horizontal=True,
+        key="specialist_agent_preset",
+    )
+    if preset == "Core debate agents":
+        st.session_state.enabled_specialist_agents = list(CORE_SPECIALIST_AGENT_NAMES)
+    elif preset == "All specialist agents":
+        st.session_state.enabled_specialist_agents = list(agent_names)
+    selected_names = st.multiselect(
+        "Enabled specialist agents",
+        agent_names,
+        default=[name for name in st.session_state.enabled_specialist_agents if name in agent_names],
+        key="enabled_specialist_agents",
+        help="Custom selections persist when you run the pipeline. Use the core set for a clearer debate-style demo.",
+    )
     selected_agents = [agent for agent in ALL_AGENTS if agent.name in selected_names]
 
     for agent in selected_agents:
@@ -2923,7 +3621,7 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
     df["review_status"] = df["review"].apply(lambda value: value.get("status", "open") if isinstance(value, dict) else "open")
     st.dataframe(df[[col for col in preferred if col in df.columns]], use_container_width=True, hide_index=True)
 
-    st.subheader("Risk acceptance and remediation")
+    st.subheader("Finding detail")
     selected_finding_id = st.selectbox(
         "Finding",
         [f["finding_id"] for f in filtered],
@@ -3075,6 +3773,11 @@ def _render_argument_graphs_page() -> None:
         return
     st.write("Inspect the APEC-PS proof trace as a graph of evidence, support, attacks, warrants, plans, AI-generated arguments, and human validation.")
     _render_graph(trace)
+    with st.expander("Temporal predicates", expanded=False):
+        _render_temporal_predicates(trace)
+    with st.expander("Proof-event trace table", expanded=False):
+        st.caption("This is the underlying APEC-PS trace used to build the graph. Each row is a proof event with an id, actor, event type, claim, references, and metadata.")
+        _render_trace(trace)
 
 
 def _render_trace(trace: ProofTrace) -> None:
@@ -3088,7 +3791,7 @@ def _render_trace(trace: ProofTrace) -> None:
     st.dataframe(pd.DataFrame(filtered), use_container_width=True, hide_index=True)
     for row in filtered:
         severity = row.get("severity")
-        label = f"{KIND_ICONS.get(row['kind'], '-') } {row['actor']} - {row['kind']}"
+        label = f"{KIND_ICONS.get(row['kind'], '-') } {row['actor']} - {row.get('main_event', row['kind'])} / {row.get('type', row['kind'])}"
         with st.expander(label):
             if severity:
                 st.markdown(_severity_html(str(severity)), unsafe_allow_html=True)
@@ -3097,7 +3800,64 @@ def _render_trace(trace: ProofTrace) -> None:
             st.json(metadata)
 
 
-def _event_option_label(event: Any) -> str:
+def _render_temporal_predicates(trace: ProofTrace) -> None:
+    rows = _compute_temporal_predicates(trace)
+    if not rows:
+        st.info("No proof events are available for temporal predicate computation.")
+        return
+
+    st.caption(
+        "Operational APEC-PS temporal view. Each proof-event receives an ordered time point, "
+        "a fluent, and a computed state based on support, attack, counterattack, and validation links."
+    )
+    summary = Counter(row["state"] for row in rows)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        _metric_card("Active", summary.get("active", 0), "not defeated", "#0ea5e9")
+    with c2:
+        _metric_card("Valid", summary.get("valid", 0), "supported or validated", "#059669")
+    with c3:
+        _metric_card("Clipped", summary.get("terminated", 0), "undefeated attack", "#dc2626")
+    with c4:
+        _metric_card("Pending", summary.get("pending", 0), "needs support", "#64748b")
+
+    display_columns = [
+        "time",
+        "event_id",
+        "actor",
+        "kind",
+        "fluent",
+        "state",
+        "Happens",
+        "Initiates",
+        "ActiveAt",
+        "Clipped",
+        "Terminates",
+        "Valid",
+        "supporting_events",
+        "attacking_events",
+        "validation_events",
+        "claim",
+    ]
+    st.dataframe(pd.DataFrame(rows)[display_columns], use_container_width=True, hide_index=True)
+    with st.expander("Predicate interpretation", expanded=False):
+        st.markdown(
+            """
+            - `Happens(e,t)` is assigned to every proof-event according to its trace order.
+            - `Initiates(e,f,t)` means the event starts a fluent, such as evidence, objection, plan, or validation.
+            - `ActiveAt(e,f,t)` means the fluent remains active because the event has not been defeated by an unresolved attack.
+            - `Clipped(e,f,t)` means an undefeated attack targets the event and blocks its fluent.
+            - `Terminates(e,f,t)` is derived when a clipped event should no longer carry its fluent forward.
+            - `Valid(e,f,t)` means the event is active and either supported, validated, or accepted as a primary premise.
+
+            This is an implementation-level approximation of the APEC-PS temporal predicates for prototype verification.
+            It checks structural consistency and reconstructability; it does not prove factual correctness of the security finding.
+            """
+        )
+
+
+def _event_option_label(event: Any, display_ids: Dict[str, str] | None = None) -> str:
+    display_ids = display_ids or {}
     severity = event.metadata.get("severity")
     algorithm = event.metadata.get("algorithm")
     bits = [event.actor, event.kind]
@@ -3105,7 +3865,7 @@ def _event_option_label(event: Any) -> str:
         bits.append(str(severity))
     if algorithm:
         bits.append(str(algorithm))
-    return f"{event.id} | {' / '.join(bits)} | {event.claim[:80]}"
+    return f"{display_ids.get(event.id, event.id)} | {' / '.join(bits)} | {event.claim[:80]}"
 
 
 def _connected_path_ids(events_by_id: Dict[str, Any], selected_id: str) -> Set[str]:
@@ -3145,26 +3905,29 @@ def _groupable_premise_key(event: Any) -> Tuple[str, str, str] | None:
 
 
 def _build_graph_projection(trace: ProofTrace, collapse_repeated: bool) -> Tuple[List[Dict[str, Any]], List[Dict[str, str]], Dict[str, str]]:
+    display_ids = _event_display_id_map(trace)
     if not collapse_repeated:
         nodes = [
             {
-                "id": event.id,
-                "event_ids": [event.id],
+                "id": display_ids.get(event.id, event.id),
+                "event_ids": [display_ids.get(event.id, event.id)],
                 "actor": event.actor,
-                "kind": event.kind,
+                "kind": _apec_main_event(event),
+                "source_kind": event.kind,
+                "event_type": _apec_event_type(event),
                 "claim": event.claim,
-                "metadata": event.metadata,
+                "metadata": _event_to_apec_dict(event, display_ids=display_ids)["metadata"],
                 "count": 1,
                 "grouped": False,
             }
             for event in trace.events
         ]
         edges = [
-            {"from": ref, "to": event.id, "kind": event.kind}
+            {"from": display_ids.get(ref, ref), "to": display_ids.get(event.id, event.id), "kind": event.kind}
             for event in trace.events
             for ref in (event.references or [])
         ]
-        return nodes, edges, {event.id: event.id for event in trace.events}
+        return nodes, edges, {event.id: display_ids.get(event.id, event.id) for event in trace.events}
 
     groups: Dict[Tuple[str, str, str], List[Any]] = {}
     id_map: Dict[str, str] = {}
@@ -3176,34 +3939,38 @@ def _build_graph_projection(trace: ProofTrace, collapse_repeated: bool) -> Tuple
         else:
             nodes.append(
                 {
-                    "id": event.id,
-                    "event_ids": [event.id],
+                    "id": display_ids.get(event.id, event.id),
+                    "event_ids": [display_ids.get(event.id, event.id)],
                     "actor": event.actor,
-                    "kind": event.kind,
+                    "kind": _apec_main_event(event),
+                    "source_kind": event.kind,
+                    "event_type": _apec_event_type(event),
                     "claim": event.claim,
-                    "metadata": event.metadata,
+                    "metadata": _event_to_apec_dict(event, display_ids=display_ids)["metadata"],
                     "count": 1,
                     "grouped": False,
                 }
             )
-            id_map[event.id] = event.id
+            id_map[event.id] = display_ids.get(event.id, event.id)
 
     for key, grouped_events in groups.items():
         if len(grouped_events) == 1:
             event = grouped_events[0]
             nodes.append(
                 {
-                    "id": event.id,
-                    "event_ids": [event.id],
+                    "id": display_ids.get(event.id, event.id),
+                    "event_ids": [display_ids.get(event.id, event.id)],
                     "actor": event.actor,
-                    "kind": event.kind,
+                    "kind": _apec_main_event(event),
+                    "source_kind": event.kind,
+                    "event_type": _apec_event_type(event),
                     "claim": event.claim,
-                    "metadata": event.metadata,
+                    "metadata": _event_to_apec_dict(event, display_ids=display_ids)["metadata"],
                     "count": 1,
                     "grouped": False,
                 }
             )
-            id_map[event.id] = event.id
+            id_map[event.id] = display_ids.get(event.id, event.id)
             continue
 
         algorithm, severity, finding_type = key
@@ -3213,14 +3980,20 @@ def _build_graph_projection(trace: ProofTrace, collapse_repeated: bool) -> Tuple
         nodes.append(
             {
                 "id": group_id,
-                "event_ids": [event.id for event in grouped_events],
+                "event_ids": [display_ids.get(event.id, event.id) for event in grouped_events],
                 "actor": "CryptoDiscoveryAgent",
-                "kind": "premise",
+                "kind": "support",
+                "source_kind": "premise",
+                "event_type": "support_observation",
                 "claim": f"{len(grouped_events)} grouped {severity} {algorithm} {finding_type} findings",
                 "metadata": {
                     "severity": severity,
                     "algorithm": algorithm,
-                    "type": finding_type,
+                    "type": "support_observation",
+                    "finding_type": finding_type,
+                    "source_kind": "premise",
+                    "premises": [f"{len(grouped_events)} scanner observations of {algorithm} / {finding_type}."],
+                    "warrant": "Repeated scanner observations can be grouped as one support observation for graph readability.",
                     "risk_score": max(event.metadata.get("risk_score", 0) for event in grouped_events),
                 },
                 "count": len(grouped_events),
@@ -3244,7 +4017,74 @@ def _build_graph_projection(trace: ProofTrace, collapse_repeated: bool) -> Tuple
     return nodes, edges, id_map
 
 
-def _render_graph_inspector(event: Any, events_by_id: Dict[str, Any]) -> None:
+def _edge_label(edge_kind: str) -> str:
+    return EDGE_MOVE_LABELS.get(edge_kind, f"{edge_kind} link")
+
+
+def _edge_description(edge_kind: str) -> str:
+    return EDGE_MOVE_DESCRIPTIONS.get(edge_kind, f"{edge_kind}: this proof-event references another event.")
+
+
+def _edge_color(edge_kind: str) -> str:
+    return EDGE_MOVE_COLORS.get(edge_kind, "#94a3b8")
+
+
+def _edge_title(edge: Dict[str, str], ai_edge: bool = False, edge_in_path: bool = True) -> str:
+    line_type = "solid direct reasoning link"
+    if ai_edge and not edge_in_path:
+        line_type = "dashed edge involving an AI-generated proof event outside the highlighted fluent path"
+    elif ai_edge:
+        line_type = "dashed edge involving an AI-generated proof event"
+    elif not edge_in_path:
+        line_type = "dashed non-selected link outside the highlighted fluent path"
+    return (
+        f"{_edge_label(edge['kind'])}<br>"
+        f"{html.escape(_edge_description(edge['kind']))}<br>"
+        f"Line style: {line_type}<br>"
+        f"From: {html.escape(edge['from'])}<br>"
+        f"To: {html.escape(edge['to'])}"
+    )
+
+
+def _node_display_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+    if metadata.get("ai_generated"):
+        keys = [
+            "type",
+            "source_kind",
+            "premises",
+            "warrant",
+            "argument_role",
+            "ai_role_agent",
+            "coordinator_actor",
+            "provider",
+            "model",
+            "confidence",
+            "grounding_status",
+            "trust_score",
+            "trust_score_max",
+            "review_status",
+            "evidence_finding_ids",
+        ]
+        return {key: metadata.get(key) for key in keys if metadata.get(key) not in (None, "", [], {})}
+    keys = [
+        "type",
+        "source_kind",
+        "premises",
+        "warrant",
+        "algorithm",
+        "finding_type",
+        "severity",
+        "risk_score",
+        "confidence",
+        "evidence",
+        "line",
+        "status",
+    ]
+    return {key: metadata.get(key) for key in keys if metadata.get(key) not in (None, "", [], {})}
+
+
+def _render_graph_inspector(event: Any, events_by_id: Dict[str, Any], display_ids: Dict[str, str] | None = None) -> None:
+    display_ids = display_ids or {}
     inbound = [source for source in (event.references or []) if source in events_by_id]
     outbound = [candidate.id for candidate in events_by_id.values() if event.id in (candidate.references or [])]
     st.markdown(_severity_html(str(event.metadata.get("severity", "low"))), unsafe_allow_html=True)
@@ -3255,17 +4095,104 @@ def _render_graph_inspector(event: Any, events_by_id: Dict[str, Any]) -> None:
     c3.metric("Risk score", event.metadata.get("risk_score", "-"))
     st.json(
         {
-            "id": event.id,
+            "id": display_ids.get(event.id, event.id),
             "actor": event.actor,
+            "main_event": _apec_main_event(event),
+            "type": _apec_event_type(event),
+            "source_kind": event.kind,
             "kind": event.kind,
-            "references": event.references or [],
-            "metadata": event.metadata,
+            "references": _display_refs(event.references or [], display_ids),
+            "premises": _apec_premises(event, display_ids=display_ids),
+            "warrant": _apec_warrant(event),
+            "metadata": _event_to_apec_dict(event, display_ids=display_ids)["metadata"],
         }
     )
 
 
-def _inject_graph_click_inspector(html: str, node_details: Dict[str, Dict[str, Any]]) -> str:
+def _render_graph_legend() -> None:
+    st.markdown(
+        """
+        <div style="
+            background:#ffffff;
+            border:1px solid #cbd5e1;
+            border-left:5px solid #2563eb;
+            border-radius:8px;
+            padding:12px 14px;
+            margin:8px 0 14px 0;
+            color:#0f172a;
+            box-shadow:0 1px 2px rgba(15,23,42,.06);
+        ">
+          <div style="font-weight:700;margin-bottom:8px;">Graph Legend</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">
+            <b style="min-width:210px;">Severity</b>
+            <span class="risk-pill" style="background:#fecaca;border:1px solid #dc2626;color:#dc2626">HIGH</span>
+            <span class="risk-pill" style="background:#fed7aa;border:1px solid #d97706;color:#d97706">MEDIUM</span>
+            <span class="risk-pill" style="background:#bbf7d0;border:1px solid #059669;color:#059669">LOW</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">
+            <b style="min-width:210px;">Event types (Node kind border)</b>
+            <span style="border-left:20px solid #16a34a;padding-left:6px;">support event</span>
+            <span style="border-left:20px solid #dc2626;padding-left:6px;">attack event</span>
+            <span style="border-left:20px solid #334155;padding-left:6px;">validation</span>
+            <span style="background:#dbeafe;border:1px solid #bfdbfe;padding:1px 6px;">AI-generated proof event</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px;">
+            <b style="min-width:210px;">Argumentation moves (Edges)</b>
+            <span style="border-left:20px solid #94a3b8;padding-left:6px;">evidence link</span>
+            <span style="border-left:20px solid #7c3aed;padding-left:6px;">warrant link</span>
+            <span style="border-left:20px solid #0f766e;padding-left:6px;">claim link</span>
+            <span style="border-left:20px solid #16a34a;padding-left:6px;">support relation</span>
+            <span style="border-left:20px solid #dc2626;padding-left:6px;">attack relation</span>
+            <span style="border-left:20px solid #334155;padding-left:6px;">validation link</span>
+          </div>
+          <div style="font-size:12px;color:#475569;line-height:1.45;">
+            Nodes use three main event categories: support, attack, and validation. Detailed types such as support_observation,
+            support_warrant, support_claim, attack_undermine, attack_undercut, attack_rebut, and validation_accept are stored in node details and JSON.
+            A support relation is an edge. A warrant link explains the rule connecting evidence to a claim.
+            Solid lines are direct reasoning links; dashed lines indicate
+            links involving AI-generated proof-events or links outside the selected fluent path. A red glow marks nodes challenged by an unresolved attack.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _inject_graph_click_inspector(html: str, node_details: Dict[str, Dict[str, Any]], include_legend: bool = True) -> str:
     details_json = json.dumps(node_details).replace("</", "<\\/")
+    legend_html = """
+    <div id="graph-legend" style="
+      margin:12px 14px; width:auto;
+      background:#ffffff; border:1px solid #cbd5e1; border-radius:8px;
+      padding:12px;
+      font-family:Arial,sans-serif; color:#0f172a; font-size:12px;">
+      <div style="font-weight:700;margin-bottom:8px;">Graph Legend</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">
+        <b style="min-width:210px;">Severity</b>
+        <span style="background:#fecaca;color:#dc2626;border:1px solid #dc2626;border-radius:999px;padding:2px 8px;">high</span>
+        <span style="background:#fed7aa;color:#d97706;border:1px solid #d97706;border-radius:999px;padding:2px 8px;">medium</span>
+        <span style="background:#bbf7d0;color:#059669;border:1px solid #059669;border-radius:999px;padding:2px 8px;">low</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #e2e8f0;">
+        <b style="min-width:210px;">Event types (Node kind border)</b>
+        <span style="border-left:20px solid #16a34a;padding-left:6px;">support event</span>
+        <span style="border-left:20px solid #dc2626;padding-left:6px;">attack event</span>
+        <span style="border-left:20px solid #334155;padding-left:6px;">validation</span>
+        <span style="background:#dbeafe;border:1px solid #bfdbfe;padding:1px 6px;">AI-generated proof event</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+        <b style="min-width:210px;">Argumentation moves (Edges)</b>
+        <span style="border-left:20px solid #94a3b8;padding-left:6px;">evidence link</span>
+        <span style="border-left:20px solid #7c3aed;padding-left:6px;">warrant link</span>
+        <span style="border-left:20px solid #0f766e;padding-left:6px;">claim link</span>
+        <span style="border-left:20px solid #16a34a;padding-left:6px;">support relation</span>
+        <span style="border-left:20px solid #dc2626;padding-left:6px;">attack relation</span>
+        <span style="border-left:20px solid #334155;padding-left:6px;">validation link</span>
+      </div>
+      <div style="margin-top:6px;color:#475569;">Solid lines are direct reasoning links. Dashed lines indicate links involving AI-generated proof-events or non-selected links when a fluent path is highlighted.</div>
+      <div style="margin-top:4px;color:#475569;">Thick borders show node kind. A red glow marks nodes that are challenged by an unresolved attack.</div>
+    </div>
+    """ if include_legend else ""
     panel = """
     <div id="node-inspector" style="
       position:absolute; right:14px; top:14px; z-index:10; width:320px;
@@ -3275,23 +4202,7 @@ def _inject_graph_click_inspector(html: str, node_details: Dict[str, Dict[str, A
       <div style="font-weight:700;margin-bottom:4px;">Node details</div>
       <div style="font-size:12px;color:#475569;">Click a graph node to inspect its claim, evidence, and metadata.</div>
     </div>
-    <div id="graph-legend" style="
-      position:absolute; left:14px; bottom:14px; z-index:10; width:280px;
-      background:#ffffff; border:1px solid #cbd5e1; border-radius:8px;
-      box-shadow:0 8px 24px rgba(15,23,42,.12); padding:12px;
-      font-family:Arial,sans-serif; color:#0f172a; font-size:12px;">
-      <div style="font-weight:700;margin-bottom:8px;">Severity and edge legend</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <span style="background:#dc2626;color:#fff;border-radius:999px;padding:2px 8px;">high</span>
-        <span style="background:#d97706;color:#fff;border-radius:999px;padding:2px 8px;">medium</span>
-        <span style="background:#059669;color:#fff;border-radius:999px;padding:2px 8px;">low</span>
-      </div>
-      <div><span style="color:#16a34a;font-weight:700;">support</span> strengthens a claim</div>
-      <div><span style="color:#dc2626;font-weight:700;">attack</span> challenges a claim</div>
-      <div><span style="color:#94a3b8;font-weight:700;">other</span> warrant, premise, validation, or plan</div>
-      <div style="margin-top:6px;"><span style="border:3px solid #b516b5;padding:1px 6px;font-weight:700;">AI</span> generated node with provenance metadata</div>
-      <div style="margin-top:6px;color:#475569;">Thick red node borders mark unresolved challenges.</div>
-    </div>
+    __LEGEND__
     <script>
       const APEC_NODE_DETAILS = __DETAILS__;
       function escapeHtml(value) {
@@ -3305,8 +4216,9 @@ def _inject_graph_click_inspector(html: str, node_details: Dict[str, Dict[str, A
         if (!target || !item) return;
         const metadata = escapeHtml(JSON.stringify(item.metadata || {}, null, 2));
         target.innerHTML = `
-          <div style="font-weight:700;margin-bottom:6px;">${escapeHtml(item.actor)} / ${escapeHtml(item.kind)}</div>
+          <div style="font-weight:700;margin-bottom:6px;">${escapeHtml(item.actor)} / ${escapeHtml(item.kind)} event</div>
           <div style="font-size:12px;color:#475569;margin-bottom:8px;">${escapeHtml(item.id)}</div>
+          <div style="font-size:12px;color:#475569;margin-bottom:8px;">type: ${escapeHtml(item.event_type || "-")} · source kind: ${escapeHtml(item.source_kind || "-")}</div>
           <div style="line-height:1.35;margin-bottom:8px;">${escapeHtml(item.claim)}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
             <span style="background:#e2e8f0;border-radius:999px;padding:2px 8px;font-size:12px;">severity: ${escapeHtml(item.severity || "-")}</span>
@@ -3325,7 +4237,7 @@ def _inject_graph_click_inspector(html: str, node_details: Dict[str, Dict[str, A
         }
       });
     </script>
-    """.replace("__DETAILS__", details_json)
+    """.replace("__DETAILS__", details_json).replace("__LEGEND__", legend_html)
     return html.replace("</body>", panel + "</body>")
 
 
@@ -3342,6 +4254,7 @@ def _build_argument_graph_html(
 
     projected_nodes, projected_edges, _ = _build_graph_projection(trace, collapse_repeated)
     events_by_id = {event.id: event for event in trace.events}
+    display_ids = _event_display_id_map(trace)
     attacked_ids = {ref for event in trace.events if event.kind == "attack" for ref in (event.references or [])}
     unresolved_projected_ids = set(attacked_ids)
     projected_by_id = {node["id"]: node for node in projected_nodes}
@@ -3364,22 +4277,26 @@ def _build_argument_graph_html(
         net.toggle_physics(True)
         net.set_options("""{"physics": {"stabilization": true}, "edges": {"smooth": true}}""")
 
-    kind_rows = {"premise": 0, "support": 1, "warrant": 2, "attack": 3, "claim": 4, "validation": 5}
+    kind_rows = {"support": 0, "attack": 1, "validation": 2}
     for idx, node in enumerate(projected_nodes):
         metadata = node["metadata"]
         severity = metadata.get("severity")
         kind = node["kind"]
+        event_type = node.get("event_type") or metadata.get("type") or kind
+        source_kind = node.get("source_kind") or metadata.get("source_kind") or kind
         is_ai = bool(metadata.get("ai_generated"))
-        color = SEVERITY_COLORS.get(str(severity), KIND_COLORS.get(kind, "#64748b"))
-        is_unresolved = node["id"] in unresolved_projected_ids and kind in {"claim", "support", "warrant"}
-        border = "#b91c1c" if is_unresolved else "#b516b5" if is_ai else KIND_COLORS.get(kind, "#64748b")
-        title = f"{node['actor']}<br>{kind}<br>{node['claim']}"
+        color = AI_PROVENANCE_COLOR if is_ai else SEVERITY_COLORS.get(str(severity), "#ffffff")
+        is_unresolved = node["id"] in unresolved_projected_ids and kind == "support"
+        border = MAIN_EVENT_COLORS.get(kind, "#64748b")
+        title = f"{node['actor']}<br>{kind} event<br>Type: {event_type}<br>Source kind: {source_kind}<br>{node['claim']}"
         if severity:
             title += f"<br>Severity: {severity}"
         if metadata.get("risk_score") is not None:
             title += f"<br>Risk score: {metadata.get('risk_score')}"
         if node["grouped"]:
             title += f"<br>Grouped events: {node['count']}"
+        if is_unresolved:
+            title += "<br>Challenged by an unresolved attack"
         if is_ai:
             title += (
                 f"<br>AI role: {metadata.get('argument_role', '-')}"
@@ -3390,7 +4307,7 @@ def _build_argument_graph_html(
                 f"<br>Trust score: {metadata.get('trust_score', '-')}/{metadata.get('trust_score_max', '-')}"
                 f"<br>Human review: {metadata.get('review_status', 'pending_review')}"
             )
-        label = f"AI - {str(metadata.get('argument_role', kind)).replace('_', ' ')}" if is_ai else f"{node['actor']}\n{kind}"
+        label = f"{node['actor']}\n{event_type}"
         if node["grouped"]:
             label = f"{node['count']} findings\n{metadata.get('algorithm')}"
         x = idx * 180 if layout_mode == "Timeline" else None
@@ -3402,7 +4319,8 @@ def _build_argument_graph_html(
             color={"background": color, "border": border, "highlight": {"background": "#fef3c7", "border": "#f59e0b"}},
             shape="box",
             margin=8,
-            borderWidth=5 if is_unresolved else 4 if is_ai else 1,
+            borderWidth=6 if is_unresolved else 5,
+            shadow={"enabled": is_unresolved, "color": "rgba(220,38,38,0.42)", "size": 18, "x": 0, "y": 0},
             x=x,
             y=y,
             fixed=layout_mode == "Timeline",
@@ -3411,16 +4329,15 @@ def _build_argument_graph_html(
     for edge in projected_edges:
         edge_kind = edge["kind"]
         ai_edge = bool(projected_by_id.get(edge["to"], {}).get("metadata", {}).get("ai_generated"))
-        edge_color = "#dc2626" if edge_kind == "attack" else "#16a34a" if edge_kind == "support" else "#94a3b8"
         net.add_edge(
             edge["from"],
             edge["to"],
-            color=edge_color,
-            label=edge_kind,
-            title=f"{edge_kind}: {edge['from']} -> {edge['to']}",
+            color=_edge_color(edge_kind),
+            label=_edge_label(edge_kind),
+            title=_edge_title(edge, ai_edge=ai_edge),
             arrows="to",
             dashes=ai_edge,
-            width=2 if ai_edge else 1,
+            width=3 if ai_edge else 2,
             font={"align": "middle", "size": 11, "color": "#334155"},
         )
 
@@ -3430,10 +4347,12 @@ def _build_argument_graph_html(
             "event_ids": node["event_ids"],
             "actor": node["actor"],
             "kind": node["kind"],
+            "event_type": node.get("event_type"),
+            "source_kind": node.get("source_kind"),
             "claim": node["claim"],
             "severity": node["metadata"].get("severity"),
             "risk_score": node["metadata"].get("risk_score"),
-            "metadata": node["metadata"],
+            "metadata": _node_display_metadata(node["metadata"]),
             "count": node["count"],
             "grouped": node["grouped"],
         }
@@ -3483,7 +4402,7 @@ def _build_html_report(
     if trace and include_proof_events:
         events = "".join(
             "<li>"
-            f"<b>{html.escape(event.actor)} / {html.escape(event.kind)}</b>: {html.escape(event.claim)}"
+            f"<b>{html.escape(event.id)} | {html.escape(event.actor)} / {html.escape(event.kind)}</b>: {html.escape(event.claim)}"
             f"<br><small>refs: {html.escape(', '.join(event.references or []) or '-')}</small>"
             "</li>"
             for event in trace.events
@@ -3530,6 +4449,9 @@ def _build_html_report(
       <p><small>Generated at {html.escape(datetime.now(timezone.utc).isoformat())}</small></p>
     </div>
   </section>
+
+  <h2>Operational Report Purpose</h2>
+  <p>This report is intended for security triage and remediation tracking. It emphasizes findings, review status, remediation playbooks, and reconstructable proof-event evidence.</p>
 
   <h2>Findings</h2>
   <table>
@@ -3593,7 +4515,7 @@ def _build_university_html_report(
     actor_items = "".join(f"<li><b>{html.escape(actor)}</b>: {count} events</li>" for actor, count in sorted(actor_counts.items()))
     proof_items = "".join(
         "<li>"
-        f"<b>{html.escape(event.actor)} / {html.escape(event.kind)}</b>: {html.escape(event.claim)}"
+        f"<b>{html.escape(event.id)} | {html.escape(event.actor)} / {html.escape(event.kind)}</b>: {html.escape(event.claim)}"
         f"<br><small>refs: {html.escape(', '.join(event.references or []) or '-')}</small>"
         "</li>"
         for event in trace_events[:30]
@@ -3683,6 +4605,7 @@ def _build_university_html_report(
   <section class="section">
     <h2>Abstract</h2>
     <p>This report documents a post-quantum cryptography risk triage generated by APEC-PS. It combines cryptographic discovery, risk scoring, deterministic agent reasoning, argumentation-based proof events, and human-review evidence into an auditable migration artefact.</p>
+    <p>Unlike the operational report, this academic report explains the method behind the output. It is intended for research presentation, thesis documentation, and reviewer inspection of the APEC-PS mapping from agent communication to proof-event traces.</p>
   </section>
 
   <section class="section">
@@ -3935,6 +4858,7 @@ def _render_graph(trace: ProofTrace) -> None:
         return
 
     events_by_id = {event.id: event for event in trace.events}
+    display_ids = _event_display_id_map(trace)
     attacked_ids = {ref for event in trace.events if event.kind == "attack" for ref in (event.references or [])}
     graph_cols = st.columns([2, 1, 1])
     with graph_cols[0]:
@@ -3946,50 +4870,43 @@ def _render_graph(trace: ProofTrace) -> None:
     with graph_cols[1]:
         height = st.slider("Graph height", 360, 900, 560, step=40)
     with graph_cols[2]:
-        physics = st.toggle("Physics layout", value=True)
+        physics = st.toggle("Physics layout", value=True, help=PHYSICS_LAYOUT_HELP)
 
     control_cols = st.columns([1, 1, 2])
     with control_cols[0]:
-        layout_mode = st.selectbox("Layout", ["Hierarchical", "Force-directed", "Timeline"])
+        layout_mode = st.selectbox(
+            "Layout",
+            ["Hierarchical", "Force-directed", "Timeline"],
+            help="Hierarchical: fixed proof chain. Force-directed: physics-based clusters. Timeline: rows by event type.",
+        )
+        st.caption(GRAPH_LAYOUT_DESCRIPTIONS[layout_mode])
     with control_cols[1]:
-        collapse_repeated = st.toggle("Group repeated findings", value=True)
+        collapse_repeated = st.toggle("Group repeated findings", value=True, help=GROUP_REPEATED_HELP)
     with control_cols[2]:
         selected_event_id = st.selectbox(
-            "Inspect / highlight path",
+            "Inspect / highlight path (fluent)",
             [""] + [event.id for event in trace.events],
-            format_func=lambda value: "Select a node" if not value else _event_option_label(events_by_id[value]),
+            format_func=lambda value: "Select a node" if not value else _event_option_label(events_by_id[value], display_ids),
+            help="Highlights the selected proof event, its referenced ancestors, and its dependent descendants. This approximates the active fluent/path of reasoning.",
         )
 
     path_ids = _connected_path_ids(events_by_id, selected_event_id) if selected_event_id else set()
     if selected_event_id:
         with st.expander("Selected node details", expanded=True):
-            _render_graph_inspector(events_by_id[selected_event_id], events_by_id)
+            _render_graph_inspector(events_by_id[selected_event_id], events_by_id, display_ids=display_ids)
 
-    st.markdown(
-        """
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px 0;">
-          <b>Severity:</b>
-          <span class="risk-pill" style="background:#dc2626">HIGH</span>
-          <span class="risk-pill" style="background:#d97706">MEDIUM</span>
-          <span class="risk-pill" style="background:#059669">LOW</span>
-          <b style="margin-left:10px;">Node kind border:</b>
-          <span style="border-left:18px solid #2563eb;padding-left:6px;">premise</span>
-          <span style="border-left:18px solid #16a34a;padding-left:6px;">support</span>
-          <span style="border-left:18px solid #dc2626;padding-left:6px;">attack/unresolved</span>
-          <span style="border-left:18px solid #7c3aed;padding-left:6px;">warrant</span>
-          <span style="border-left:18px solid #0f766e;padding-left:6px;">claim</span>
-          <b style="margin-left:10px;">Edges:</b>
-          <span style="border-left:18px solid #16a34a;padding-left:6px;">support</span>
-          <span style="border-left:18px solid #dc2626;padding-left:6px;">attack</span>
-          <span style="border-left:18px solid #94a3b8;padding-left:6px;">other</span>
-          <span style="border:3px solid #b516b5;padding:1px 6px;margin-left:10px;">AI + provenance</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    _render_graph_legend()
 
     projected_nodes, projected_edges, id_map = _build_graph_projection(trace, collapse_repeated)
     projected_by_id = {node["id"]: node for node in projected_nodes}
+    raw_node_count = len(trace.events)
+    grouped_node_count = len(projected_nodes)
+    if collapse_repeated and grouped_node_count != raw_node_count:
+        st.caption(f"Grouped findings: {raw_node_count} proof-event nodes are displayed as {grouped_node_count} graph nodes.")
+    elif collapse_repeated:
+        st.caption("No repeated premise nodes were available to group in this trace.")
+    else:
+        st.caption(f"Ungrouped view: showing {raw_node_count} individual proof-event nodes.")
     visible_ids = set(events_by_id)
     if query:
         matches = set()
@@ -4040,7 +4957,7 @@ def _render_graph(trace: ProofTrace) -> None:
     else:
         net.set_options("""{"physics": {"stabilization": true}, "edges": {"smooth": true}}""")
 
-    kind_rows = {"premise": 0, "support": 1, "warrant": 2, "attack": 3, "claim": 4, "validation": 5}
+    kind_rows = {"support": 0, "attack": 1, "validation": 2}
     for idx, node in enumerate(projected_nodes):
         node_id = node["id"]
         if node_id not in visible_ids:
@@ -4048,12 +4965,14 @@ def _render_graph(trace: ProofTrace) -> None:
         metadata = node["metadata"]
         severity = metadata.get("severity")
         kind = node["kind"]
+        event_type = node.get("event_type") or metadata.get("type") or kind
+        source_kind = node.get("source_kind") or metadata.get("source_kind") or kind
         is_ai = bool(metadata.get("ai_generated"))
-        color = SEVERITY_COLORS.get(str(severity), KIND_COLORS.get(kind, "#64748b"))
-        is_unresolved = node_id in unresolved_projected_ids and kind in {"claim", "support", "warrant"}
+        color = AI_PROVENANCE_COLOR if is_ai else SEVERITY_COLORS.get(str(severity), "#ffffff")
+        is_unresolved = node_id in unresolved_projected_ids and kind == "support"
         is_path = not projected_path_ids or node_id in projected_path_ids
-        border = "#b91c1c" if is_unresolved else "#b516b5" if is_ai else KIND_COLORS.get(kind, "#64748b")
-        title = f"{node['actor']}<br>{kind}<br>{node['claim']}"
+        border = MAIN_EVENT_COLORS.get(kind, "#64748b")
+        title = f"{node['actor']}<br>{kind} event<br>Type: {event_type}<br>Source kind: {source_kind}<br>{node['claim']}"
         if severity:
             title += f"<br>Severity: {severity}"
         risk_score = metadata.get("risk_score")
@@ -4062,7 +4981,7 @@ def _render_graph(trace: ProofTrace) -> None:
         if node["grouped"]:
             title += f"<br>Grouped events: {node['count']}"
         if is_unresolved:
-            title += "<br>Unresolved attack present"
+            title += "<br>Challenged by an unresolved attack"
         if is_ai:
             title += (
                 f"<br>AI role: {metadata.get('argument_role', '-')}"
@@ -4074,7 +4993,7 @@ def _render_graph(trace: ProofTrace) -> None:
                 f"<br>Human review: {metadata.get('review_status', 'pending_review')}"
             )
 
-        label = f"AI - {str(metadata.get('argument_role', kind)).replace('_', ' ')}" if is_ai else f"{node['actor']}\n{kind}"
+        label = f"{node['actor']}\n{event_type}"
         if node["grouped"]:
             label = f"{node['count']} findings\n{metadata.get('algorithm')}"
         x = idx * 180 if layout_mode == "Timeline" else None
@@ -4090,7 +5009,8 @@ def _render_graph(trace: ProofTrace) -> None:
             },
             shape="box",
             margin=8,
-            borderWidth=5 if is_unresolved else 4 if is_ai else 3 if node_id in projected_path_ids else 1,
+            borderWidth=7 if is_unresolved else 6 if node_id in projected_path_ids else 5,
+            shadow={"enabled": is_unresolved, "color": "rgba(220,38,38,0.42)", "size": 18, "x": 0, "y": 0},
             opacity=1.0 if is_path else 0.35,
             x=x,
             y=y,
@@ -4102,10 +5022,12 @@ def _render_graph(trace: ProofTrace) -> None:
             "event_ids": node["event_ids"],
             "actor": node["actor"],
             "kind": node["kind"],
+            "event_type": node.get("event_type"),
+            "source_kind": node.get("source_kind"),
             "claim": node["claim"],
             "severity": node["metadata"].get("severity"),
             "risk_score": node["metadata"].get("risk_score"),
-            "metadata": node["metadata"],
+            "metadata": _node_display_metadata(node["metadata"]),
             "count": node["count"],
             "grouped": node["grouped"],
         }
@@ -4118,13 +5040,12 @@ def _render_graph(trace: ProofTrace) -> None:
         edge_kind = edge["kind"]
         edge_in_path = not projected_path_ids or (edge["from"] in projected_path_ids and edge["to"] in projected_path_ids)
         ai_edge = bool(projected_by_id.get(edge["to"], {}).get("metadata", {}).get("ai_generated"))
-        edge_color = "#dc2626" if edge_kind == "attack" else "#16a34a" if edge_kind == "support" else "#94a3b8"
         net.add_edge(
             edge["from"],
             edge["to"],
-            color=edge_color if edge_in_path else "#cbd5e1",
-            label=edge_kind,
-            title=f"{edge_kind}: {edge['from']} -> {edge['to']}",
+            color=_edge_color(edge_kind) if edge_in_path else "#cbd5e1",
+            label=_edge_label(edge_kind),
+            title=_edge_title(edge, ai_edge=ai_edge, edge_in_path=edge_in_path),
             arrows="to",
             width=3 if edge_in_path and projected_path_ids else 2 if ai_edge else 1,
             dashes=ai_edge or not edge_in_path,
@@ -4133,8 +5054,8 @@ def _render_graph(trace: ProofTrace) -> None:
     if not visible_ids:
         st.info("No graph nodes match the search.")
         return
-    html = _inject_graph_click_inspector(net.generate_html(notebook=False), node_details)
-    components.html(html, height=height + 40)
+    html = _inject_graph_click_inspector(net.generate_html(notebook=False), node_details, include_legend=False)
+    components.html(html, height=height + 80, scrolling=True)
 
 
 def _safe_extract_zip(archive_path: Path, destination: Path) -> Path:
@@ -4530,10 +5451,20 @@ def main() -> None:
             include_playbooks=include_playbooks,
             include_proof_events=include_proof_events,
         )
-        standard_tab, tooling_tab, pqc_tab, preview_tab = st.tabs(
-            ["Standard reports", "Security tooling", "PQC-protected export", "Preview"]
+        academic_tab, operational_tab, tooling_tab, pqc_tab, preview_tab = st.tabs(
+            ["Academic report", "Operational report", "Security tooling", "PQC-protected export", "Preview"]
         )
-        with standard_tab:
+        with academic_tab:
+            st.markdown(
+                """
+                <div class="section-card">
+                  <h3>Why two report types?</h3>
+                  <p><b>Academic reports</b> explain the research method: APEC-PS interpretation, Agentic AI workflow, trust controls, limitations, and citation.</p>
+                  <p><b>Operational reports</b> support security action: findings, severity, remediation status, playbooks, and proof-event evidence.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             st.markdown(
                 """
                 <div class="report-cover">
@@ -4557,19 +5488,28 @@ def main() -> None:
                     st.download_button("Download Academic PDF", university_pdf, file_name="apecps_academic_report.pdf", mime="application/pdf")
                 else:
                     st.info("PDF export is available when reportlab is installed.")
-            st.divider()
+        with operational_tab:
+            st.markdown(
+                """
+                <div class="report-cover">
+                  <h2>Operational report package</h2>
+                  <p>Security-facing export with triage summary, findings, remediation playbooks, human review state, proof-event ledger, and optional graph.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.markdown("<div class='download-card'><h4>Markdown</h4><p>Readable report for docs and review.</p></div>", unsafe_allow_html=True)
-                st.download_button("Download Markdown", markdown, file_name="pqc_risk_report.md", mime="text/markdown")
+                st.markdown("<div class='download-card'><h4>Operational Markdown</h4><p>Readable triage report for docs and review.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download Operational Markdown", markdown, file_name="operational_pqc_risk_report.md", mime="text/markdown")
             with c2:
-                st.markdown("<div class='download-card'><h4>HTML + Graph</h4><p>Complete report with interactive argument graph.</p></div>", unsafe_allow_html=True)
-                st.download_button("Download HTML Report + Graph", html_report, file_name="pqc_risk_report_with_graph.html", mime="text/html")
+                st.markdown("<div class='download-card'><h4>Operational HTML + Graph</h4><p>Complete triage report with interactive argument graph.</p></div>", unsafe_allow_html=True)
+                st.download_button("Download Operational HTML + Graph", html_report, file_name="operational_pqc_risk_report_with_graph.html", mime="text/html")
             with c3:
-                st.markdown("<div class='download-card'><h4>PDF</h4><p>Printable summary for presentation or archive.</p></div>", unsafe_allow_html=True)
+                st.markdown("<div class='download-card'><h4>Operational PDF</h4><p>Printable security summary for review or archive.</p></div>", unsafe_allow_html=True)
                 pdf_bytes = _build_pdf_report(markdown, findings, trace)
                 if pdf_bytes:
-                    st.download_button("Download PDF", pdf_bytes, file_name="pqc_risk_report.pdf", mime="application/pdf")
+                    st.download_button("Download Operational PDF", pdf_bytes, file_name="operational_pqc_risk_report.pdf", mime="application/pdf")
                 else:
                     st.info("PDF export is available when reportlab is installed.")
             if graph_html:
@@ -4584,18 +5524,30 @@ def main() -> None:
                     kinds = sorted({event.kind for event in trace.events})
                     g1, g2, g3 = st.columns(3)
                     with g1:
-                        graph_layout = st.selectbox("Graph layout", ["Hierarchical", "Force-directed", "Timeline"], key="report_graph_layout")
-                        graph_collapse = st.checkbox("Group repeated finding nodes", value=True, key="report_graph_collapse")
+                        graph_layout = st.selectbox(
+                            "Graph layout",
+                            ["Hierarchical", "Force-directed", "Timeline"],
+                            key="report_graph_layout",
+                            help="Hierarchical: fixed proof chain. Force-directed: physics-based clusters. Timeline: rows by event type.",
+                        )
+                        st.caption(GRAPH_LAYOUT_DESCRIPTIONS[graph_layout])
+                        graph_collapse = st.checkbox(
+                            "Group repeated finding nodes",
+                            value=True,
+                            key="report_graph_collapse",
+                            help=GROUP_REPEATED_HELP,
+                        )
                     with g2:
                         graph_actors = set(st.multiselect("Graph agents", actors, default=actors, key="report_graph_actors"))
                         graph_kinds = set(st.multiselect("Graph event types", kinds, default=kinds, key="report_graph_kinds"))
                     with g3:
                         graph_severities = set(st.multiselect("Graph severities", all_severities, default=list(selected_severities), key="report_graph_severities"))
                         path_options = ["Full filtered graph"] + [event.id for event in trace.events]
+                        report_display_ids = _event_display_id_map(trace)
                         path_event_id = st.selectbox(
                             "Selected path only",
                             path_options,
-                            format_func=lambda value: "Full filtered graph" if value == "Full filtered graph" else _event_option_label(next(event for event in trace.events if event.id == value)),
+                            format_func=lambda value: "Full filtered graph" if value == "Full filtered graph" else _event_option_label(next(event for event in trace.events if event.id == value), report_display_ids),
                             key="report_graph_path",
                         )
                     if graph_actors and graph_kinds and graph_severities:

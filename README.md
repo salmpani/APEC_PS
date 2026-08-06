@@ -22,10 +22,10 @@ and security-workflow prototyping. It is not a production security scanner.
 
 ## Key Features
 
-- **Demo Mode** for one-click university presentations.
-- **Academic report export** with cover details, methodology, executive
-  summary, APEC-PS reasoning, argument graph, remediation backlog, limitations,
-  and citation.
+- **Demo Mode** for one-click university presentations, including optional
+  Agentic AI quick run and argument-graph preview.
+- **Academic and operational report exports** with distinct research-facing
+  and security-facing content.
 - **Guided presentation walkthrough** for a clear live-demo narrative.
 - **Executive Dashboard** with risk score, severity counts, top risks, review
   status, and unresolved argumentation challenges.
@@ -37,12 +37,21 @@ and security-workflow prototyping. It is not a production security scanner.
   signatures, TLS versions, and cipher indicators.
 - **Context-aware risk scoring** using severity, confidence, retention years,
   business impact, and migration complexity.
-- **Agentic reasoning pipeline** with deterministic agents for discovery, risk,
-  compliance, compatibility, cost, planning, critique, and human review.
-- **Agent Debate View** to explain the APEC-PS research contribution.
+- **Agentic reasoning pipeline** with selectable specialist agents, a central
+  AI coordinator, AI role-agents, debate rounds, critique, and human consensus.
+- **Agent Debate View** focused on the proof-event conversation and APEC-PS
+  support/attack/validation moves.
 - **Interactive argument graph** with layouts, search, path highlighting,
   grouping, legends, and unresolved attack markers.
-- **Risk acceptance workflow** with reviewer, reason, status, and expiry.
+- **Simplified graph semantics** with three main node categories:
+  support event, attack/unresolved event, and validation event. Finer APEC-PS
+  types such as `support_observation`, `support_elaborate`,
+  `support_strategy`, `attack_undermine`, `attack_undercut`,
+  `attack_rebut`, and `validation_accept` are stored as metadata.
+- **Readable proof-event identifiers** such as `PE1`, `PE2`, and `PE3` in the
+  graph, proof-event trace, JSON export, and temporal predicates.
+- **Review workflow** with finding-to-decision view, trace links, remediation
+  playbook, reviewer, reason, status, and expiry.
 - **Persistent scan history** using local SQLite.
 - **Report exports** in Markdown, PDF, JSON, SARIF, HTML, and standalone graph
   HTML.
@@ -50,13 +59,14 @@ and security-workflow prototyping. It is not a production security scanner.
 - **Report customization** for severity scope, anonymized paths/endpoints,
   author/contact inclusion, citation inclusion, proof events, remediation
   backlog, and argument graph inclusion.
-- **Finding-to-agent trace links** showing which agents and proof events used a
-  selected finding.
+- **Finding-to-decision trace links** showing which agents and proof events
+  used a selected finding and how it moved toward a decision.
 - **Advanced graph export** with layout selection, agent filters, event-type
   filters, severity filters, selected-path export, and embedded legend.
 - **PQC-protected report export** using ML-KEM-768, HKDF-SHA256, and
   AES-256-GCM.
-- **Optional LLM advisor agent** using either OpenAI API or local Ollama.
+- **LLM-backed Agentic AI coordinator** using Groq Cloud, local Ollama, OpenAI
+  API, or a deterministic fallback depending on the deployment environment.
 
 ## Project Structure
 
@@ -120,22 +130,31 @@ The fastest presentation flow is:
 
 1. Open the app.
 2. Go to **Demo Mode**.
-3. Click **Load Demo Scenario**.
-4. Go to **Dashboard** to show the executive overview.
-5. Use the guided walkthrough panel as your presentation script.
-6. Go to **Findings** and open **Trace links** for a selected finding.
-7. Go to **Debate** to explain APEC-PS support/attack reasoning.
-8. Go to **Agents > Argument graph** to show the visual proof trace.
-9. Go to **Report** to preview/export the report or encrypt it with PQC.
+3. Select whether to include **Agentic AI quick run** and **Show argument
+   graph after run**.
+4. Click **Load Demo Scenario**.
+5. In Demo Mode, present the tabs in this order:
+   **Argument graph**, **Finding-to-decision**, **Reports**, and
+   **PQC secure exchange**.
+6. Go to **Dashboard** to show the executive overview.
+7. Go to **Agents** to show selected specialist agents and the deterministic
+   proof-event trace.
+8. Go to **Agentic AI** to show the central coordinator, AI role-agents,
+   debate rounds, and human consensus over AI arguments.
+9. Go to **Review** to show finding-to-decision, trace links, remediation
+   playbook, and human review.
+10. Go to **Report** to export the academic report, operational report,
+    security tooling formats, or PQC-protected package.
 
 Demo Mode automatically:
 
 - loads `sample_repo`
 - runs the repository scanner
 - runs all deterministic agents
+- optionally adds Agentic AI coordinator and role-agent proof events
 - creates the APEC-PS proof trace
 - saves a scan-history snapshot
-- prepares the dashboard, debate view, graph, and reports
+- prepares the dashboard, graph, review view, reports, and PQC secure exchange
 
 ## How To Use Each Page
 
@@ -166,10 +185,24 @@ Use this page when presenting the overall result to a non-technical audience.
 
 Runs a complete bundled scenario with one button.
 
+Options:
+
+- **Agentic AI quick run**: adds deterministic AI coordinator output and
+  role-agent proof events for a fast presentation without requiring an API key.
+- **Show argument graph after run**: renders the APEC-PS graph directly inside
+  Demo Mode after the scan and agents complete.
+
 Button:
 
 - **Load Demo Scenario**: scans `sample_repo`, runs agents, saves history, and
   prepares all app views.
+
+Demo output tabs:
+
+- **Argument graph**
+- **Finding-to-decision**
+- **Reports**
+- **PQC secure exchange**
 
 Use this for a reliable live presentation.
 
@@ -206,7 +239,9 @@ public demo.
 
 ### Findings
 
-Runs scans and supports human review.
+Runs scans and presents normalized scanner output. Human review, trace links,
+finding-to-decision explanation, and remediation playbooks are handled in the
+separate **Review** page so the scanner output stays clean.
 
 Controls:
 
@@ -255,9 +290,21 @@ Fields:
 The endpoint scanner checks TLS version, cipher, certificate public key, and
 certificate signature algorithm.
 
-#### Risk Acceptance And Remediation
+### Review
 
-For each finding, the app provides a remediation playbook and review form.
+The Review page is the first page in the output menu. It connects raw scanner
+findings to APEC-PS reasoning and human decision-making.
+
+Tabs:
+
+- **Finding-to-decision**: summarizes how the selected finding moves from
+  evidence to risk interpretation, challenge, migration plan, and decision
+  state.
+- **Trace links**: shows which proof events reference the finding and which
+  downstream agents used those events.
+- **Remediation playbook**: lists concrete mitigation steps, owner guidance,
+  evidence to collect, and review notes.
+- **Human review**: records the human disposition for the selected finding.
 
 Statuses:
 
@@ -279,7 +326,9 @@ adds a HumanReview proof event.
 
 ### Agents
 
-Runs deterministic software agents over the current findings.
+Runs selectable deterministic specialist agents over the current findings.
+This page is used to build the auditable baseline trace before, or alongside,
+the Agentic AI coordinator.
 
 Agents:
 
@@ -291,33 +340,87 @@ Agents:
 - **PerformanceCostAgent**: estimates migration effort.
 - **MigrationPlannerAgent**: proposes migration actions.
 - **CriticAgent**: challenges unsupported plans.
-- **HumanReviewAgent**: requires human approval or review.
+- **HumanReviewAgent**: marks the generated plan as requiring human approval
+  or review.
 
-Tabs:
+The specialist agents can be selected for a run. A smaller set is often easier
+to present than a large one. The recommended core set is:
 
-- **Proof events**: table and expandable event details.
-- **Argument graph**: visual proof trace.
+- **CryptoDiscoveryAgent**
+- **QuantumRiskAgent**
+- **CompatibilityAgent**
+- **MigrationPlannerAgent**
+- **HumanReviewAgent**
+
+The output is a proof-event table with readable event IDs such as `PE1`,
+`PE2`, and `PE3`. Each event has one main category and a more precise APEC-PS
+type.
+
+Main event categories:
+
+- **support**: an event that contributes evidence, elaboration, warrant,
+  strategy, solution, or claim support.
+- **attack**: an event that challenges a premise, warrant, claim, or plan.
+- **validation**: an event that records human review, acceptance, rejection,
+  deferral, or risk acceptance.
+
+Examples of detailed event types:
+
+- `support_observation`
+- `support_elaborate`
+- `support_warrant`
+- `support_strategy`
+- `support_solution`
+- `support_claim`
+- `attack_undermine`
+- `attack_undercut`
+- `attack_rebut`
+- `validation_accept`
+- `validation_defer`
+
+Premises, warrants, claims, source kind, confidence, provenance, and evidence
+links are stored as event metadata. This keeps the graph simple while still
+preserving the formal APEC-PS details in JSON, reports, and selected-node
+details.
+
+### Argument Graphs
+
+The Argument Graphs page visualizes the APEC-PS proof trace. It is separate
+from Agents so the user can first generate a trace, then inspect it as a graph.
 
 Argument graph controls:
 
-- **Search nodes**: search actor, claim, severity, algorithm, or score.
-- **Layout**: hierarchical, force-directed, or timeline.
-- **Group repeated findings**: collapses similar premise nodes.
-- **Inspect / highlight path**: highlights upstream/downstream reasoning.
+- **Search nodes**: search actor, claim, severity, algorithm, review status,
+  provider, or model.
+- **Layout**: hierarchical, force-directed, or timeline. Hover help explains
+  what each layout is for.
+- **Physics layout**: lets the graph move dynamically when enabled; when
+  disabled, the graph is more static and presentation-friendly.
+- **Group repeated findings**: collapses repeated low-level discovery events
+  with the same algorithm, severity, and finding type.
+- **Inspect / highlight path (fluent)**: highlights a selected proof event,
+  its referenced ancestors, and its dependent descendants.
 
 Graph conventions:
 
-- node fill color shows severity
-- node border color shows event kind
-- red thick border shows unresolved challenge
-- edge labels show support, attack, warrant, validation, etc.
+- node fill color shows severity or AI-generated provenance
+- node border color shows the main event category: support, attack, or
+  validation
+- red thick border shows unresolved attack or unresolved challenge
+- edge color and line style show argumentation moves
+- hover and selected-node details show premises, warrants, claims, references,
+  event type, provider/model, confidence, and review status
 
-### Finding-To-Agent Trace Links
+Argumentation moves:
 
-Inside **Findings**, select a finding and open the **Trace links** tab. This
-shows which APEC-PS proof events were created from the selected finding and
-which agents used it downstream. It connects scanner evidence to risk claims,
-critiques, migration plans, and validations.
+- **Evidence link**: connects scanner evidence to a proof event.
+- **Warrant link**: connects a reason or rule to the event it justifies.
+- **Claim link**: connects a proposed decision or plan to its supporting
+  events.
+- **Support relation**: shows that one event strengthens another.
+- **Attack relation**: shows rebutting, undercutting, or undermining.
+- **Validation link**: connects human or review events to the claim or plan
+  being decided.
 
 ### Debate
 
@@ -337,39 +440,43 @@ argumentation structure around the security findings.
 
 ### Agentic AI
 
-The default **Agentic AI Analysis** uses the best configured coordinator. After a scan,
-open **Agentic AI** and click **Run Agentic AI Analysis**. The app:
+The **Agentic AI** page makes the AI coordinator central to the prototype. It
+does not replace the deterministic specialist agents; it coordinates over
+their proof trace and adds higher-level AI role-agent arguments that remain
+evidence-linked and human-reviewable.
 
-1. runs all deterministic specialist agents;
-2. detects Ollama and an installed local model automatically;
-3. sends the ten highest-risk findings and a compact proof trace to one
-   coordinator call;
-4. appends five structured AI argument nodes: risk claim, supporting argument,
-   migration recommendation, counterargument, and human-review request; and
+After a scan, open **Agentic AI** and click **Run Agentic AI Analysis**. The
+app:
+
+1. runs the selected deterministic specialist agents if a proof trace does not
+   already exist;
+2. selects the best available AI coordinator provider;
+3. sends the highest-risk findings and compact proof trace to the coordinator;
+4. creates structured AI role-agent proof events, such as risk analyst,
+   migration strategist, compatibility critic, and trust reviewer; and
 5. saves the completed trace in scan history.
 
-Each AI node records its provider, model, generation time, confidence,
-evidence finding IDs, proof-event references, batch ID, and human-review
-status. The application validates model-supplied references before adding them
-to the trace.
+The AI coordinator can create multiple AI role-agents in one coordinated run.
+These are represented as proof events with main categories `support`,
+`attack`, or `validation`, and detailed types such as `support_claim`,
+`support_elaborate`, `support_warrant`, `attack_undercut`, and
+`validation_accept`. Premises, warrants, claims, provider/model provenance,
+confidence, grounding status, referenced proof events, and linked finding IDs
+are stored as metadata.
 
-In **Debate > Argumentation view**, the AI consensus panel shows:
+The **Human consensus of AI argument** panel in **Agentic AI** is the trust
+control for AI-generated proof events. It shows evidence-grounded AI moves,
+agreement and challenge counts, linked deterministic agents, provider/model
+provenance, confidence, grounding status, and human review state. A reviewer
+can accept, reject, or request revision of each AI argument. The decision
+becomes a linked `HumanReviewAgent` proof event and is retained in history,
+JSON, graph exports, and reports. AI-generated review requests never count as
+human approval.
 
-- evidence-grounded AI moves;
-- agreement and challenge counts;
-- links to deterministic agents;
-- provider and model provenance; and
-- human review status.
-
-A reviewer can accept, reject, or request revision of each AI argument. The
-decision becomes a linked `HumanReviewAgent` proof event and is retained in
-history and report exports. AI-generated review requests never count as human
-approval.
-
-If Ollama is unavailable, the same button uses a deterministic local
-coordinator so the workflow still completes. When `GROQ_API_KEY` is configured,
-the public Streamlit deployment uses Groq Cloud before falling back. Automatic
-provider order is:
+The public Streamlit deployment is expected to use **Groq Cloud** as the
+default hosted AI coordinator when `GROQ_API_KEY` is configured. A local
+developer run can use local Ollama, Groq, OpenAI, or the deterministic
+fallback. Automatic provider order is:
 
 ```text
 Local app:       Ollama -> Groq -> deterministic fallback
@@ -415,8 +522,10 @@ Keep Ollama running at `http://localhost:11434`; the app selects
 longer while the model loads into memory. Later requests remain warm for ten
 minutes.
 
-Important: the deterministic agents are the reliable baseline. The LLM advisor
-is optional and should be treated as human-reviewed analysis.
+Important: Agentic AI is central to the research prototype, but trust is not
+delegated blindly to the model. The deterministic specialist trace remains the
+auditable baseline, while AI-generated arguments must stay evidence-grounded,
+typed, reference-valid, and subject to human consensus.
 
 ### History
 
@@ -436,19 +545,38 @@ proof trace.
 
 ### Report
 
-Exports results.
+Exports results through separate report types. The two main reports have
+different audiences:
+
+- **Academic report**: explains the research method. It emphasizes APEC-PS,
+  Agentic AI workflow, proof-event interpretation, trust controls, limitations,
+  and citation.
+- **Operational report**: supports security action. It emphasizes findings,
+  severity, review state, remediation playbooks, proof-event evidence, and the
+  argument graph.
+
+Report tabs:
+
+- **Academic report**: academic Markdown, HTML, and PDF.
+- **Operational report**: operational Markdown, HTML + Graph, PDF, standalone
+  graph HTML, and advanced graph export.
+- **Security tooling**: JSON and SARIF.
+- **PQC-protected export**: encrypted HTML or JSON report package.
+- **Preview**: styled report preview plus raw Markdown.
 
 Available downloads:
 
 - **Academic Markdown / HTML / PDF**: formal academic-style report with cover
-  details, methodology, executive summary, APEC-PS reasoning, graph,
-  remediation backlog, limitations, and citation.
-- **Markdown**: readable report.
-- **HTML Report + Graph**: full report with embedded interactive argument graph.
+  details, abstract, methodology, APEC-PS and Agentic AI explanation,
+  governance/trust controls, argument graph, limitations, and citation.
+- **Operational Markdown / HTML + Graph / PDF**: security-facing triage report
+  with findings, remediation playbooks, human review state, proof-event ledger,
+  and optional graph.
 - **Standalone Graph HTML**: graph only.
-- **JSON**: structured findings, reviews, playbooks, and proof trace.
+- **JSON**: structured findings, reviews, playbooks, proof trace, temporal
+  predicates, `PE1`-style event IDs, event types, premises, warrants, claims,
+  metadata, and references.
 - **SARIF**: security-tooling format for code scanning.
-- **PDF**: PDF report.
 
 The **Preview** tab provides a styled report preview with summary metrics, top
 findings, governance status, and remediation previews. The raw Markdown report
@@ -470,16 +598,18 @@ These options affect the report exports and PQC-protected report package.
 
 #### Advanced Graph Export
 
-Inside **Report > Standard reports**, open **Advanced graph export** to create a
-focused argument graph. You can filter by:
+Inside **Report > Operational report**, open **Advanced graph export** to
+create a focused argument graph. You can filter by:
 
 - layout: hierarchical, force-directed, or timeline
 - agent
-- proof-event type
+- proof-event type, such as `support_observation`, `attack_undermine`, or
+  `validation_accept`
 - severity
 - selected reasoning path
 
-The exported graph includes a built-in severity and edge legend.
+The exported graph includes a built-in legend for severity, event types, and
+argumentation moves.
 
 #### PQC-Protected Report Export
 
@@ -581,8 +711,16 @@ They are real in the sense that each agent has:
 - interaction through a shared APEC-PS trace
 
 They are not fully autonomous by default because they do not independently
-search, call tools, or modify code. The optional **Agentic AI** page adds an
-LLM-backed advisor, but the deterministic trace remains the auditable baseline.
+search, call tools, or modify code. The **Agentic AI** page adds a central
+LLM-backed coordinator that can create multiple AI role-agent proof events.
+The coordinator strengthens the agentic perspective, while the deterministic
+trace remains the auditable baseline for trust and reproducibility.
+
+In the graph and JSON export, AI role-agents are treated as normal APEC-PS
+proof events. They use the same main categories: `support`, `attack`, and
+`validation`. Their detailed role, such as risk analyst, migration strategist,
+compatibility critic, or trust reviewer, is stored as metadata together with
+provider/model provenance and human consensus state.
 
 ## Security Notes
 
@@ -688,8 +826,12 @@ python -m streamlit run app/app.py --server.port 8501
 
 1. Quantum computing threatens RSA/ECDSA/ECDH.
 2. The scanner discovers vulnerable crypto assets.
-3. Deterministic agents produce explainable APEC-PS proof events.
-4. Debate view shows support and attack arguments.
-5. Human review records accountability.
-6. Reports can be exported for security workflows.
-7. The final report itself can be protected with PQC.
+3. Specialist agents produce an auditable baseline proof trace.
+4. The Agentic AI coordinator creates higher-level AI role-agent arguments.
+5. The argument graph shows `PE1`, `PE2`, and later proof events as support,
+   attack, and validation nodes.
+6. Review records finding-to-decision trace links, remediation playbook, and
+   human consensus.
+7. Academic and operational reports export the same evidence for different
+   audiences.
+8. The final report itself can be protected with PQC.
