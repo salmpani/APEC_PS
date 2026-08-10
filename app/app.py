@@ -35,6 +35,8 @@ from scanner import scan_endpoints, scan_repository
 SEVERITY_COLORS = {"high": "#fecaca", "medium": "#fed7aa", "low": "#bbf7d0"}
 SEVERITY_BORDER_COLORS = {"high": "#dc2626", "medium": "#d97706", "low": "#059669"}
 AI_PROVENANCE_COLOR = "#dbeafe"
+METRIC_LIGHT_BLUE = "#0ea5e9"
+METRIC_MAGENTA = "#b516b5"
 GRAPH_LAYOUT_DESCRIPTIONS = {
     "Hierarchical": "Fixed left-to-right proof structure. Best for explaining the reasoning chain from evidence to review.",
     "Force-directed": "Physics-based network. Nodes spread out dynamically, making clusters and dense relations easier to explore.",
@@ -156,12 +158,46 @@ DEMO_SCENARIOS = {
         "presentation_angle": "Best for explaining certificate and signature migration planning.",
     },
 }
-NAV_SECTIONS = [
-    ("OVERVIEW", ["Demo Mode", "Dashboard", "About"], ["One-click scenario", "Executive summary", "Author and rights"]),
-    ("INPUT", ["Repository", "Findings"], ["Select source", "Scan findings"]),
-    ("REASONING", ["Agents", "Agentic AI", "Argument Graphs", "Debate"], ["Specialist trace", "Central AI coordinator", "Graph inspection", "Argumentation view"]),
-    ("OUTPUT", ["Review", "History", "Report"], ["Human decision", "Past scans", "Export evidence"]),
+PAGE_ALIASES = {
+    "Repository": "Evidence Sources",
+    "Findings": "Crypto Findings",
+    "Agents": "Agent Reasoning",
+    "Debate": "Agent Debate",
+    "Review": "Human Review",
+    "Report": "Reports",
+}
+SIMPLE_NAV_SECTIONS = [
+    (
+        "SIMPLE MODE",
+        ["Demo Mode", "Crypto Findings", "Agent Reasoning", "Human Review", "Reports"],
+        ["Run demo", "See findings", "See agent reasoning", "Review decision", "Export report - PQC secure exchange"],
+    ),
+    (
+        "ADVANCED",
+        ["Dashboard", "Evidence Sources", "Agentic AI", "Argument Graphs", "Agent Debate", "History", "About"],
+        ["Executive summary", "Select source", "Central AI coordinator", "Graph inspection", "Argumentation view", "Past scans", "Author and rights"],
+    ),
 ]
+FULL_NAV_SECTIONS = [
+    ("OVERVIEW", ["Demo Mode", "Dashboard", "About"], ["One-click scenario", "Executive summary", "Author and rights"]),
+    ("INPUT", ["Evidence Sources", "Crypto Findings"], ["Select source", "Scan findings"]),
+    ("REASONING", ["Agent Reasoning", "Agentic AI", "Argument Graphs", "Agent Debate"], ["Specialist trace", "Central AI coordinator", "Graph inspection", "Argumentation view"]),
+    ("OUTPUT", ["Human Review", "History", "Reports"], ["Human decision", "Past scans", "Export evidence"]),
+]
+PAGE_EXPLANATIONS = {
+    "Demo Mode": "Run a guided end-to-end scenario: scan evidence, run agents, inspect the graph, review a decision, and export reports.",
+    "Crypto Findings": "Review the cryptographic evidence detected in code, configuration, certificates, and TLS endpoints.",
+    "Agent Reasoning": "Run selected specialist agents and inspect the generated APEC-PS proof-event trace.",
+    "Human Review": "Record the human disposition, inspect finding-to-decision reasoning, and view trace links and remediation playbooks.",
+    "Reports": "Export academic, operational, tooling, and PQC-protected evidence packages.",
+    "Dashboard": "Summarize risk posture, review status, and unresolved argumentation challenges.",
+    "Evidence Sources": "Choose static repositories, uploaded archives, GitHub projects, or live TLS endpoints as scan inputs.",
+    "Agentic AI": "Use the AI coordinator and role-agents to create structured, reviewable AI arguments.",
+    "Argument Graphs": "Inspect the APEC-PS trace as support, attack, warrant, claim, evidence, and validation relations.",
+    "Agent Debate": "Read the agent argumentation rounds as a conversation of support, critique, planning, and validation.",
+    "History": "Reload previous scans and proof traces from local persistence.",
+    "About": "View the project identity, citation, author details, and permitted use.",
+}
 
 st.set_page_config(page_title=f"{APP_TITLE} - {APP_SUBTITLE}", layout="wide")
 st.markdown(
@@ -179,6 +215,41 @@ st.markdown(
       }
       .stApp { background: #f8fafc; color: #0f172a; }
       [data-testid="stSidebar"] { background: #eef2f7; }
+      .block-container {
+        padding-top: 1.25rem;
+        max-width: 1380px;
+      }
+      .block-container h1 {
+        color: var(--apec-navy);
+        font-size: 2.45rem;
+        line-height: 1.12;
+        font-weight: 800;
+        letter-spacing: 0;
+        margin-bottom: 0.6rem;
+      }
+      .block-container h2 {
+        color: var(--apec-navy);
+        font-size: 1.9rem;
+        line-height: 1.18;
+        font-weight: 760;
+        letter-spacing: 0;
+        margin-top: 1.1rem;
+        margin-bottom: 0.55rem;
+      }
+      .block-container h3 {
+        color: var(--apec-navy);
+        font-size: 1.35rem;
+        line-height: 1.22;
+        font-weight: 760;
+        letter-spacing: 0;
+      }
+      .block-container h4 {
+        color: var(--apec-navy);
+        font-size: 1.08rem;
+        line-height: 1.25;
+        font-weight: 760;
+        letter-spacing: 0;
+      }
       .stApp,
       .stApp p,
       .stApp span,
@@ -193,11 +264,43 @@ st.markdown(
       }
       .stMarkdown,
       .stMarkdown p,
-      .stCaptionContainer,
       .stText,
       [data-testid="stWidgetLabel"],
       [data-testid="stWidgetLabel"] p {
         color: #0f172a !important;
+      }
+      .stMarkdown p,
+      .stText {
+        font-size: 15.5px;
+        line-height: 1.55;
+      }
+      .stCaptionContainer,
+      .stCaptionContainer p,
+      .stCaptionContainer span,
+      small {
+        color: #64748b !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+      }
+      [data-testid="stWidgetLabel"],
+      [data-testid="stWidgetLabel"] p {
+        font-size: 15px !important;
+        font-weight: 700 !important;
+        line-height: 1.35 !important;
+      }
+      .stButton button,
+      .stDownloadButton button,
+      button[kind] {
+        font-size: 15px !important;
+        font-weight: 720 !important;
+        min-height: 2.7rem;
+      }
+      .stSelectbox,
+      .stMultiSelect,
+      .stTextInput,
+      .stTextArea,
+      .stSlider {
+        font-size: 15px;
       }
       input,
       textarea,
@@ -221,7 +324,6 @@ st.markdown(
       div[role="option"]:hover {
         background: #e0f2fe !important;
       }
-      .block-container { padding-top: 1.25rem; }
       .section-card {
         background: var(--apec-panel);
         border: 1px solid var(--apec-line);
@@ -229,6 +331,26 @@ st.markdown(
         padding: 16px;
         box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
         margin: 8px 0 14px 0;
+      }
+      .section-card h3 {
+        font-size: 20px;
+        line-height: 1.25;
+      }
+      .section-card p {
+        font-size: 14.5px;
+        line-height: 1.48;
+      }
+      .page-intro {
+        background: #e0f2fe;
+        border: 1px solid #7dd3fc;
+        border-left: 5px solid var(--apec-blue);
+        border-radius: 8px;
+        color: #075985;
+        font-size: 15px;
+        font-style: italic;
+        line-height: 1.45;
+        padding: 10px 14px;
+        margin: 0.35rem 0 1rem 0;
       }
       .metric-card {
         background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
@@ -280,7 +402,8 @@ st.markdown(
       .decision-step h4 {
         margin: 0 0 6px 0;
         color: #07185f;
-        font-size: 15px;
+        font-size: 16px;
+        line-height: 1.25;
       }
       .decision-step p {
         margin: 0;
@@ -306,13 +429,33 @@ st.markdown(
       }
       .conversation-claim {
         color: #0f172a;
-        font-size: 14px;
-        line-height: 1.4;
+        font-size: 15px;
+        line-height: 1.48;
       }
       .conversation-refs {
         color: #64748b;
         font-size: 12px;
         margin-top: 6px;
+      }
+      .formal-event {
+        background: #ffffff;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin: 10px 0;
+      }
+      .formal-event h4 {
+        margin: 0 0 8px 0;
+        color: var(--apec-navy);
+      }
+      .formal-event code {
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      .quality-note {
+        color: #64748b !important;
+        font-size: 13px;
+        line-height: 1.4;
       }
       .download-card {
         background: #ffffff;
@@ -324,6 +467,8 @@ st.markdown(
       .download-card h4 {
         margin: 0 0 4px 0;
         color: var(--apec-navy);
+        font-size: 17px;
+        line-height: 1.25;
       }
       .download-card p {
         margin: 0;
@@ -368,6 +513,8 @@ st.markdown(
       .preview-card h3 {
         margin-top: 0;
         color: var(--apec-navy);
+        font-size: 21px;
+        line-height: 1.25;
       }
       .source-card {
         background: #ffffff;
@@ -381,6 +528,8 @@ st.markdown(
       .source-card h4 {
         margin: 0 0 6px 0;
         color: var(--apec-navy);
+        font-size: 17px;
+        line-height: 1.25;
       }
       .source-card p {
         margin: 0;
@@ -398,6 +547,7 @@ st.markdown(
       .empty-state h3 {
         margin: 0 0 6px 0;
         color: var(--apec-navy);
+        font-size: 22px;
       }
       .empty-state p {
         margin: 0;
@@ -413,6 +563,8 @@ st.markdown(
       .report-cover h2 {
         color: var(--apec-navy);
         margin-top: 0;
+        font-size: 26px;
+        line-height: 1.2;
       }
       .trace-chip {
         display: inline-block;
@@ -429,16 +581,21 @@ st.markdown(
         padding-top: 10px;
         border-top: 1px solid #cbd5e1;
         color: var(--apec-navy) !important;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 800;
         text-transform: uppercase;
         letter-spacing: .06em;
       }
       .nav-hint {
         color: #64748b !important;
-        font-size: 12px;
+        font-size: 12.5px;
         margin-top: -4px;
         margin-bottom: 2px;
+      }
+      [data-testid="stSidebar"] [role="radiogroup"] label p {
+        font-size: 15px !important;
+        font-weight: 740 !important;
+        line-height: 1.3 !important;
       }
       div[data-testid="stMetric"] {
         background: #ffffff;
@@ -477,6 +634,13 @@ st.markdown(
       }
       .stTabs [data-baseweb="tab"] p {
         color: #0f172a !important;
+        font-size: 15px !important;
+        font-weight: 750 !important;
+        line-height: 1.25 !important;
+      }
+      .stDataFrame,
+      [data-testid="stDataFrame"] {
+        font-size: 14px;
       }
       div[data-testid="stExpander"] {
         background: #ffffff;
@@ -595,12 +759,37 @@ def _empty_state(title: str, body: str) -> None:
     )
 
 
+def _active_nav_sections() -> List[Tuple[str, List[str], List[str]]]:
+    return FULL_NAV_SECTIONS
+
+
+def _all_nav_sections() -> List[Tuple[str, List[str], List[str]]]:
+    seen: set[str] = set()
+    sections: List[Tuple[str, List[str], List[str]]] = []
+    for section in SIMPLE_NAV_SECTIONS + FULL_NAV_SECTIONS:
+        if section[0] not in seen:
+            sections.append(section)
+            seen.add(section[0])
+    return sections
+
+
+def _normalize_active_page() -> None:
+    active = st.session_state.get("active_page", "Demo Mode")
+    st.session_state.active_page = PAGE_ALIASES.get(active, active)
+
+
+def _render_page_intro(page: str) -> None:
+    explanation = PAGE_EXPLANATIONS.get(page)
+    if explanation:
+        st.markdown(f"<div class='page-intro'>{html.escape(explanation)}</div>", unsafe_allow_html=True)
+
+
 def _set_active_nav(section_title: str) -> None:
     page = st.session_state.get(f"nav_radio_{section_title}")
     if not page:
         return
     st.session_state.active_page = page
-    for other_title, _, _ in NAV_SECTIONS:
+    for other_title, _, _ in _all_nav_sections():
         if other_title != section_title:
             st.session_state[f"nav_radio_{other_title}"] = None
 
@@ -884,11 +1073,11 @@ def _review_counts(findings: List[Dict[str, Any]]) -> Dict[str, int]:
 def _render_presentation_walkthrough() -> None:
     st.subheader("Presentation walkthrough")
     steps = [
-        ("1", "Load the demo", "Use Demo Mode to run scanner and agents over the bundled sample repository."),
-        ("2", "Show risk posture", "Open Dashboard and explain high risks, total score, review state, and top findings."),
-        ("3", "Explain evidence", "Open Findings, select one finding, and show evidence, playbook, and the decision brief. Use Review for trace links and human decisions."),
-        ("4", "Show argumentation", "Open Debate and Argument Graphs to show support, attack, and validation moves."),
-        ("5", "Export securely", "Open Report and export HTML/JSON/SARIF or encrypt the report with ML-KEM + AES-GCM."),
+        ("1", "Run demo", "Use Demo Mode to scan a bundled repository and generate the APEC-PS proof trace."),
+        ("2", "See findings", "Open Crypto Findings to inspect the detected PQC-relevant evidence."),
+        ("3", "See reasoning", "Open Agent Reasoning to inspect the specialist proof-event trace."),
+        ("4", "Review decision", "Open Human Review to record the human disposition and inspect the decision path."),
+        ("5", "Export report", "Open Reports to export academic, operational, tooling, or PQC secure exchange packages."),
     ]
     cols = st.columns(5)
     for col, (number, title, text) in zip(cols, steps):
@@ -994,11 +1183,11 @@ def _render_finding_trace_links(finding: Dict[str, Any], trace: ProofTrace | Non
     )
     c1, c2, c3 = st.columns(3)
     with c1:
-        _metric_card("Linked events", len(events), "proof events using this finding", "#0ea5e9")
+        _metric_card("Linked events", len(events), "proof events using this finding", METRIC_MAGENTA)
     with c2:
-        _metric_card("Agents", len(actors), "agents involved", "#b516b5")
+        _metric_card("Agents", len(actors), "agents involved", METRIC_MAGENTA)
     with c3:
-        _metric_card("Event types", len(kinds), ", ".join(kinds[:3]), "#059669")
+        _metric_card("Event types", len(kinds), ", ".join(kinds[:3]), METRIC_MAGENTA)
     table = pd.DataFrame(
         [
             {
@@ -1168,13 +1357,13 @@ def _render_finding_to_decision(finding: Dict[str, Any], trace: ProofTrace | Non
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        _metric_card("Trace events", len(events), "linked to this finding", "#0ea5e9")
+        _metric_card("Trace events", len(events), "linked to this finding", METRIC_MAGENTA)
     with m2:
-        _metric_card("Supports", len(supports), "risk arguments", "#16a34a")
+        _metric_card("Supports", len(supports), "risk arguments", METRIC_MAGENTA)
     with m3:
-        _metric_card("Challenges", len(attacks), "explicit attacks", "#dc2626")
+        _metric_card("Challenges", len(attacks), "explicit attacks", METRIC_MAGENTA)
     with m4:
-        _metric_card("Status", decision_status, "human workflow", "#059669")
+        _metric_card("Status", decision_status, "human workflow", METRIC_MAGENTA)
 
     if events:
         rows = [
@@ -1190,7 +1379,7 @@ def _render_finding_to_decision(finding: Dict[str, Any], trace: ProofTrace | Non
         st.markdown("**Linked reasoning summary**")
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     else:
-        st.info("Run the Agents page after scanning to show the complete finding-to-decision reasoning path.")
+        st.info("Run the Agent Reasoning page after scanning to show the complete finding-to-decision reasoning path.")
 
 
 def _render_polished_report_preview(findings: List[Dict[str, Any]], trace: ProofTrace | None) -> None:
@@ -1202,13 +1391,13 @@ def _render_polished_report_preview(findings: List[Dict[str, Any]], trace: Proof
     st.markdown("<div class='preview-card'><h3>Report Summary</h3></div>", unsafe_allow_html=True)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        _metric_card("Findings", len(enriched), "included in report", "#0ea5e9")
+        _metric_card("Findings", len(enriched), "included in report", METRIC_LIGHT_BLUE)
     with c2:
-        _metric_card("High risks", severity["high"], "priority items", "#dc2626")
+        _metric_card("High risks", severity["high"], "priority items", METRIC_LIGHT_BLUE)
     with c3:
-        _metric_card("Risk score", total_score, "aggregate score", "#b516b5")
+        _metric_card("Risk score", total_score, "aggregate score", METRIC_LIGHT_BLUE)
     with c4:
-        _metric_card("Proof events", trace_events, "APEC-PS trace", "#059669")
+        _metric_card("Proof events", trace_events, "APEC-PS trace", METRIC_LIGHT_BLUE)
 
     left, right = st.columns([1, 1])
     with left:
@@ -1250,7 +1439,7 @@ def _render_dashboard() -> None:
     if not findings:
         _section_card(
             "No active scan",
-            "Use Demo Mode for a one-click presentation scenario, or scan a repository from the Findings page.",
+            "Use Demo Mode for a one-click presentation scenario, or scan a repository or endpoint from the Evidence Sources page.",
         )
         scans = _list_scans(limit=5)
         if scans:
@@ -1272,15 +1461,15 @@ def _render_dashboard() -> None:
 
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
-        _metric_card("Findings", len(enriched), "active evidence items", "#0ea5e9")
+        _metric_card("Findings", len(enriched), "active evidence items", METRIC_LIGHT_BLUE)
     with c2:
-        _metric_card("High", severity["high"], "priority migration risks", "#dc2626")
+        _metric_card("High", severity["high"], "priority migration risks", METRIC_LIGHT_BLUE)
     with c3:
-        _metric_card("Risk score", total_score, "aggregate triage score", "#b516b5")
+        _metric_card("Risk score", total_score, "aggregate triage score", METRIC_LIGHT_BLUE)
     with c4:
-        _metric_card("Unresolved", unresolved_attacks, "open argument attacks", "#d97706")
+        _metric_card("Unresolved", unresolved_attacks, "open argument attacks", METRIC_LIGHT_BLUE)
     with c5:
-        _metric_card("Readiness", f"{readiness}%", "review closure estimate", "#059669")
+        _metric_card("Readiness", f"{readiness}%", "review closure estimate", METRIC_LIGHT_BLUE)
 
     left, right = st.columns([1, 1])
     with left:
@@ -1380,15 +1569,15 @@ def _render_demo_mode() -> None:
         severity = _severity_counts(findings)
         d1, d2, d3, d4, d5 = st.columns(5)
         with d1:
-            _metric_card("Findings", len(findings), "scanner output", "#0ea5e9")
+            _metric_card("Findings", len(findings), "scanner output", METRIC_LIGHT_BLUE)
         with d2:
-            _metric_card("High risks", severity["high"], "priority issues", "#dc2626")
+            _metric_card("High risks", severity["high"], "priority issues", METRIC_LIGHT_BLUE)
         with d3:
-            _metric_card("Core agents", len(CORE_SPECIALIST_AGENT_NAMES), "pipeline executed", "#b516b5")
+            _metric_card("Core agents", len(CORE_SPECIALIST_AGENT_NAMES), "pipeline executed", METRIC_LIGHT_BLUE)
         with d4:
-            _metric_card("Proof events", len(trace.events), "APEC-PS trace", "#059669")
+            _metric_card("Proof events", len(trace.events), "APEC-PS trace", METRIC_LIGHT_BLUE)
         with d5:
-            _metric_card("Reports", "Ready", "export below", "#d97706")
+            _metric_card("Reports", "Ready", "export below", METRIC_LIGHT_BLUE)
 
         markdown = _build_markdown_report(findings, trace)
         json_export = _build_json_export(findings, trace)
@@ -1398,12 +1587,15 @@ def _render_demo_mode() -> None:
         university_markdown = _build_university_markdown_report(findings, trace)
         university_html = _build_university_html_report(findings, trace, graph_html)
 
-        graph_tab, decision_tab, report_tab, secure_tab = st.tabs(
-            ["Argument graph", "Finding-to-decision", "Reports", "PQC secure exchange"]
+        graph_tab, review_tab, decision_tab, report_tab, secure_tab = st.tabs(
+            ["Argument graph", "Human review", "Finding-to-decision", "Reports", "PQC secure exchange"]
         )
         with graph_tab:
             if st.session_state.get("demo_show_graph", True) and trace:
                 _render_graph(trace)
+                _render_trace_quality_panel(trace)
+                with st.expander("Formal APEC-PS view", expanded=False):
+                    _render_formal_apecps_view(trace)
                 with st.expander("Temporal predicates", expanded=False):
                     _render_temporal_predicates(trace)
                 with st.expander("Proof-event trace", expanded=False):
@@ -1413,6 +1605,21 @@ def _render_demo_mode() -> None:
                 st.download_button("Download Standalone Graph HTML", graph_html, file_name="demo_apecps_argument_graph.html", mime="text/html")
             else:
                 st.info("Enable the argument graph option and rerun the demo to preview the graph here.")
+        with review_tab:
+            enriched = _attach_operational_metadata(findings)
+            selected_demo_finding_id = st.selectbox(
+                "Finding for human review",
+                [finding["finding_id"] for finding in enriched],
+                format_func=lambda fid: next(
+                    f"{item['algorithm']} / {item['type']} / {item['severity']} / {fid}"
+                    for item in enriched
+                    if item["finding_id"] == fid
+                ),
+                key="demo_review_finding",
+            )
+            demo_finding = next(item for item in enriched if item["finding_id"] == selected_demo_finding_id)
+            st.caption("Record the human disposition for the selected demo finding. The saved decision becomes a validation event in the APEC-PS trace.")
+            _render_human_review_form(demo_finding, findings, trace, "demo_review")
         with decision_tab:
             enriched = _attach_operational_metadata(findings)
             top_finding = sorted(enriched, key=lambda item: item.get("risk_score", 0), reverse=True)[0]
@@ -1492,26 +1699,29 @@ def _render_debate_view(trace: ProofTrace | None) -> None:
     c3.metric("Warrants", len(warrants))
     c4.metric("Unresolved challenges", len(unresolved))
 
-    left, middle, right = st.columns(3)
-    with left:
-        st.subheader("Support")
-        for event in supports[:12]:
-            with st.expander(f"{event.actor} -> {event.metadata.get('severity', '-')}", expanded=False):
-                st.write(event.claim)
-                st.caption(f"References: {', '.join(event.references or []) or '-'}")
-    with middle:
-        st.subheader("Attack / Critique")
-        for event in attacks[:12]:
-            with st.expander(f"{event.actor} -> {event.metadata.get('type', event.kind)}", expanded=False):
-                st.write(event.claim)
-                st.caption(f"Challenges: {', '.join(event.references or []) or '-'}")
-    with right:
-        st.subheader("Resolution")
-        for event in claims + validations:
-            status = event.metadata.get("status", event.kind)
-            with st.expander(f"{event.actor} -> {status}", expanded=False):
-                st.write(event.claim)
-                st.caption(f"References: {', '.join(event.references or []) or '-'}")
+    _render_debate_round_cards(trace)
+
+    with st.expander("Classic argument lists", expanded=False):
+        left, middle, right = st.columns(3)
+        with left:
+            st.subheader("Support")
+            for event in supports[:12]:
+                with st.expander(f"{event.actor} -> {event.metadata.get('severity', '-')}", expanded=False):
+                    st.write(event.claim)
+                    st.caption(f"References: {', '.join(event.references or []) or '-'}")
+        with middle:
+            st.subheader("Attack / Critique")
+            for event in attacks[:12]:
+                with st.expander(f"{event.actor} -> {event.metadata.get('type', event.kind)}", expanded=False):
+                    st.write(event.claim)
+                    st.caption(f"Challenges: {', '.join(event.references or []) or '-'}")
+        with right:
+            st.subheader("Resolution")
+            for event in claims + validations:
+                status = event.metadata.get("status", event.kind)
+                with st.expander(f"{event.actor} -> {status}", expanded=False):
+                    st.write(event.claim)
+                    st.caption(f"References: {', '.join(event.references or []) or '-'}")
 
     if unresolved:
         st.warning("Some claims or supports are still challenged. Inspect the argument graph for the unresolved red-bordered nodes.")
@@ -3207,7 +3417,7 @@ def _build_university_markdown_report(
             refs = ", ".join(event.references or [])
             lines.append(f"- **{event.id} | {event.actor} / {event.kind}:** {event.claim} (refs: {refs or '-'})")
     elif include_proof_events:
-        lines.append("No proof trace is attached. Run the Agents page to include support, attack, warrant, claim, and validation events.")
+        lines.append("No proof trace is attached. Run the Agent Reasoning page to include support, attack, warrant, claim, and validation events.")
 
     if include_playbooks:
         lines.extend(["", "## Remediation Backlog", ""])
@@ -3650,24 +3860,75 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
     st.markdown("**Finding detail**")
     d1, d2, d3, d4 = st.columns(4)
     with d1:
-        _metric_card("Risk score", finding.get("risk_score", "-"), "context-aware score", "#b516b5")
+        _metric_card("Risk score", finding.get("risk_score", "-"), "context-aware score", METRIC_MAGENTA)
     with d2:
-        _metric_card("Confidence", finding.get("confidence", "-"), "detection quality", "#0ea5e9")
+        _metric_card("Confidence", finding.get("confidence", "-"), "detection quality", METRIC_MAGENTA)
     with d3:
-        _metric_card("Impact", finding.get("business_impact", "-"), "business context", "#d97706")
+        _metric_card("Impact", finding.get("business_impact", "-"), "business context", METRIC_MAGENTA)
     with d4:
-        _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", "#059669")
+        _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", METRIC_MAGENTA)
     st.markdown("**Evidence**")
     st.code(str(finding.get("evidence") or "No evidence string available."))
     st.markdown("**Description**")
     st.write(finding.get("description", ""))
 
 
+def _render_human_review_form(
+    finding: Dict[str, Any],
+    findings: List[Dict[str, Any]],
+    trace: ProofTrace | None,
+    key_prefix: str,
+) -> None:
+    review = finding.get("review", {})
+    st.markdown("**Human review decision**")
+    statuses = ["open", "planned", "accepted", "false_positive", "fixed", "needs_review"]
+    current_status = review.get("status", "open")
+    status = st.selectbox(
+        "Status",
+        statuses,
+        index=statuses.index(current_status) if current_status in statuses else 0,
+        key=f"{key_prefix}_status",
+    )
+    reviewer = st.text_input("Reviewer", value=review.get("reviewer", ""), key=f"{key_prefix}_reviewer")
+    reason = st.text_area("Reason", value=review.get("reason", ""), key=f"{key_prefix}_reason")
+    expires_on = st.text_input(
+        "Expiry date",
+        value=review.get("expires_on") or "",
+        placeholder="YYYY-MM-DD, optional",
+        key=f"{key_prefix}_expires",
+    )
+    if st.button("Save review decision", type="primary", key=f"{key_prefix}_save"):
+        if not reviewer.strip() or not reason.strip():
+            st.warning("Reviewer and reason are required.")
+        else:
+            _save_review(finding["finding_id"], status, reviewer.strip(), reason.strip(), expires_on.strip() or None)
+            if trace:
+                _append_review_event(
+                    trace,
+                    finding,
+                    {
+                        "status": status,
+                        "reviewer": reviewer.strip(),
+                        "reason": reason.strip(),
+                        "expires_on": expires_on.strip() or None,
+                    },
+                )
+            scan_id = _save_scan(
+                st.session_state.get("project_name_input") or st.session_state.get("project_name", "default-project"),
+                f"review:{finding['finding_id']}",
+                st.session_state.get("findings", findings),
+                trace,
+            )
+            st.session_state.last_scan_id = scan_id
+            st.success("Review decision saved and linked to the current APEC-PS trace.")
+            st.rerun()
+
+
 def _render_review_page() -> None:
-    st.header("Review")
+    st.header("Human Review")
     findings = st.session_state.get("findings", [])
     if not findings:
-        _empty_state("No findings to review", "Run Demo Mode or scan a repository first. Review links findings to APEC-PS trace events and human decisions.")
+        _empty_state("No findings to review", "Run Demo Mode or scan an evidence source first. Human Review links findings to APEC-PS trace events and human decisions.")
         return
 
     enriched = _attach_operational_metadata(findings)
@@ -3684,6 +3945,7 @@ def _render_review_page() -> None:
     )
     finding = next(item for item in enriched if item["finding_id"] == selected_finding_id)
     review = finding.get("review", {})
+    trace = st.session_state.get("proof_trace")
 
     st.markdown(
         f"""
@@ -3700,13 +3962,15 @@ def _render_review_page() -> None:
         unsafe_allow_html=True,
     )
 
-    decision_tab, trace_tab, playbook_tab, review_tab = st.tabs(
-        ["Finding-to-decision", "Trace links", "Remediation playbook", "Human review"]
+    review_tab, decision_tab, trace_tab, playbook_tab = st.tabs(
+        ["Human review", "Finding-to-decision", "Trace links", "Remediation playbook"]
     )
+    with review_tab:
+        _render_human_review_form(finding, findings, trace, "review_page")
     with decision_tab:
-        _render_finding_to_decision(finding, st.session_state.get("proof_trace"))
+        _render_finding_to_decision(finding, trace)
     with trace_tab:
-        _render_finding_trace_links(finding, st.session_state.get("proof_trace"))
+        _render_finding_trace_links(finding, trace)
     with playbook_tab:
         playbook = finding.get("playbook", {})
         st.markdown("**Recommended remediation path**")
@@ -3715,64 +3979,24 @@ def _render_review_page() -> None:
             st.write(f"{idx}. {step}")
         c1, c2, c3 = st.columns(3)
         with c1:
-            _metric_card("Priority", playbook.get("priority", finding.get("severity", "-")), "playbook priority", "#dc2626")
+            _metric_card("Priority", playbook.get("priority", finding.get("severity", "-")), "playbook priority", METRIC_MAGENTA)
         with c2:
-            _metric_card("Algorithm", finding.get("algorithm", "-"), "affected primitive", "#0ea5e9")
+            _metric_card("Algorithm", finding.get("algorithm", "-"), "affected primitive", METRIC_MAGENTA)
         with c3:
-            _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", "#7c3aed")
-    with review_tab:
-        st.markdown("**Human review decision**")
-        statuses = ["open", "planned", "accepted", "false_positive", "fixed", "needs_review"]
-        current_status = review.get("status", "open")
-        status = st.selectbox(
-            "Status",
-            statuses,
-            index=statuses.index(current_status) if current_status in statuses else 0,
-            key="review_page_status",
-        )
-        reviewer = st.text_input("Reviewer", value=review.get("reviewer", ""), key="review_page_reviewer")
-        reason = st.text_area("Reason", value=review.get("reason", ""), key="review_page_reason")
-        expires_on = st.text_input(
-            "Expiry date",
-            value=review.get("expires_on") or "",
-            placeholder="YYYY-MM-DD, optional",
-            key="review_page_expires",
-        )
-        if st.button("Save review decision", type="primary"):
-            if not reviewer.strip() or not reason.strip():
-                st.warning("Reviewer and reason are required.")
-            else:
-                _save_review(finding["finding_id"], status, reviewer.strip(), reason.strip(), expires_on.strip() or None)
-                if st.session_state.get("proof_trace"):
-                    _append_review_event(
-                        st.session_state.proof_trace,
-                        finding,
-                        {
-                            "status": status,
-                            "reviewer": reviewer.strip(),
-                            "reason": reason.strip(),
-                            "expires_on": expires_on.strip() or None,
-                        },
-                    )
-                scan_id = _save_scan(
-                    st.session_state.get("project_name_input") or st.session_state.get("project_name", "default-project"),
-                    f"review:{finding['finding_id']}",
-                    st.session_state.get("findings", findings),
-                    st.session_state.get("proof_trace"),
-                )
-                st.session_state.last_scan_id = scan_id
-                st.success("Review decision saved and linked to the current APEC-PS trace.")
-                st.rerun()
+            _metric_card("Complexity", finding.get("migration_complexity", "-"), "migration estimate", METRIC_MAGENTA)
 
 
 def _render_argument_graphs_page() -> None:
     st.header("Argument Graphs")
     trace: ProofTrace | None = st.session_state.get("proof_trace")
     if not trace:
-        _empty_state("No argument graph yet", "Run Demo Mode, Agents, or Agentic AI first to create an APEC-PS proof trace.")
+        _empty_state("No argument graph yet", "Run Demo Mode, Agent Reasoning, or Agentic AI first to create an APEC-PS proof trace.")
         return
     st.write("Inspect the APEC-PS proof trace as a graph of evidence, support, attacks, warrants, plans, AI-generated arguments, and human validation.")
     _render_graph(trace)
+    _render_trace_quality_panel(trace)
+    with st.expander("Formal APEC-PS view", expanded=False):
+        _render_formal_apecps_view(trace)
     with st.expander("Temporal predicates", expanded=False):
         _render_temporal_predicates(trace)
     with st.expander("Proof-event trace table", expanded=False):
@@ -3788,15 +4012,19 @@ def _render_trace(trace: ProofTrace) -> None:
     selected_kinds = st.multiselect("Event filter", kinds, default=kinds)
     filtered = [row for row in rows if row["actor"] in selected_actors and row["kind"] in selected_kinds]
 
-    st.dataframe(pd.DataFrame(filtered), use_container_width=True, hide_index=True)
+    table_df = pd.DataFrame(filtered)
+    hidden_table_columns = {"type", "icon", "internal_id"}
+    table_columns = [column for column in table_df.columns if column not in hidden_table_columns]
+    st.dataframe(table_df[table_columns], use_container_width=True, hide_index=True)
     for row in filtered:
         severity = row.get("severity")
-        label = f"{KIND_ICONS.get(row['kind'], '-') } {row['actor']} - {row.get('main_event', row['kind'])} / {row.get('type', row['kind'])}"
+        event_type = row.get("type") or row.get("main_event") or row["kind"]
+        label = f"{KIND_ICONS.get(row['kind'], '-') } {row['actor']} - {event_type}"
         with st.expander(label):
             if severity:
                 st.markdown(_severity_html(str(severity)), unsafe_allow_html=True)
             st.write(row["claim"])
-            metadata = {k: v for k, v in row.items() if k not in {"id", "actor", "kind", "claim"} and v not in (None, "", [])}
+            metadata = {k: v for k, v in row.items() if k not in {"id", "actor", "kind", "claim", "icon"} and v not in (None, "", [])}
             st.json(metadata)
 
 
@@ -3813,13 +4041,13 @@ def _render_temporal_predicates(trace: ProofTrace) -> None:
     summary = Counter(row["state"] for row in rows)
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        _metric_card("Active", summary.get("active", 0), "not defeated", "#0ea5e9")
+        _metric_card("Active", summary.get("active", 0), "not defeated", METRIC_LIGHT_BLUE)
     with c2:
-        _metric_card("Valid", summary.get("valid", 0), "supported or validated", "#059669")
+        _metric_card("Valid", summary.get("valid", 0), "supported or validated", METRIC_LIGHT_BLUE)
     with c3:
-        _metric_card("Clipped", summary.get("terminated", 0), "undefeated attack", "#dc2626")
+        _metric_card("Clipped", summary.get("terminated", 0), "undefeated attack", METRIC_LIGHT_BLUE)
     with c4:
-        _metric_card("Pending", summary.get("pending", 0), "needs support", "#64748b")
+        _metric_card("Pending", summary.get("pending", 0), "needs support", METRIC_LIGHT_BLUE)
 
     display_columns = [
         "time",
@@ -3854,6 +4082,219 @@ def _render_temporal_predicates(trace: ProofTrace) -> None:
             It checks structural consistency and reconstructability; it does not prove factual correctness of the security finding.
             """
         )
+
+
+def _trace_quality_metrics(trace: ProofTrace) -> Dict[str, Any]:
+    events = trace.events
+    events_by_id = {event.id: event for event in events}
+    display_ids = _event_display_id_map(trace)
+    index_by_id = {event.id: index for index, event in enumerate(events)}
+    refs = [(event.id, ref) for event in events for ref in (event.references or [])]
+    resolved_refs = [(event_id, ref) for event_id, ref in refs if ref in events_by_id]
+    missing_refs = [(display_ids.get(event_id, event_id), ref) for event_id, ref in refs if ref not in events_by_id]
+    self_refs = [(display_ids.get(event_id, event_id), display_ids.get(ref, ref)) for event_id, ref in refs if event_id == ref]
+    forward_refs = [
+        (display_ids.get(event_id, event_id), display_ids.get(ref, ref))
+        for event_id, ref in resolved_refs
+        if index_by_id.get(ref, -1) > index_by_id.get(event_id, -1)
+    ]
+    attacks = [event for event in events if _apec_main_event(event) == "attack"]
+    typed_attacks = [
+        event for event in attacks
+        if _apec_event_type(event) in {"attack_rebut", "attack_undercut", "attack_undermine"}
+    ]
+    validations = [event for event in events if _apec_main_event(event) == "validation"]
+    linked_validations = [event for event in validations if event.references]
+    claims = [event for event in events if _apec_event_type(event) in {"support_claim", "support_solution", "support_strategy"} or event.kind == "claim"]
+    warranted_claims = [event for event in claims if _apec_warrant(event) or any(ref in events_by_id for ref in (event.references or []))]
+    evidence_linked = [
+        event for event in events
+        if event.metadata.get("finding_id")
+        or event.metadata.get("evidence_finding_ids")
+        or event.metadata.get("evidence")
+        or any(ref in events_by_id and events_by_id[ref].metadata.get("finding_id") for ref in (event.references or []))
+    ]
+    ai_events = [event for event in events if event.metadata.get("ai_generated")]
+    ai_reviewed = [event for event in ai_events if event.metadata.get("review_status") not in {None, "", "pending_review"}]
+    unresolved_targets = {ref for event in attacks for ref in (event.references or [])} - {
+        ref for event in validations if not event.metadata.get("ai_generated") for ref in (event.references or [])
+    }
+    score_checks = [
+        len(events) == len(set(event.id for event in events)),
+        not missing_refs,
+        not self_refs,
+        not forward_refs,
+        len(typed_attacks) == len(attacks),
+        len(linked_validations) == len(validations) if validations else True,
+        len(warranted_claims) == len(claims) if claims else True,
+        len(evidence_linked) >= max(1, len(events) // 3) if events else False,
+    ]
+    return {
+        "events": len(events),
+        "references": len(refs),
+        "unique_ids": len(set(event.id for event in events)),
+        "missing_refs": missing_refs,
+        "self_refs": self_refs,
+        "forward_refs": forward_refs,
+        "attacks": len(attacks),
+        "typed_attacks": len(typed_attacks),
+        "validations": len(validations),
+        "linked_validations": len(linked_validations),
+        "claims": len(claims),
+        "warranted_claims": len(warranted_claims),
+        "evidence_linked": len(evidence_linked),
+        "ai_events": len(ai_events),
+        "ai_reviewed": len(ai_reviewed),
+        "unresolved_challenges": len(unresolved_targets),
+        "quality_score": sum(1 for check in score_checks if check),
+        "quality_score_max": len(score_checks),
+    }
+
+
+def _render_trace_quality_panel(trace: ProofTrace) -> None:
+    metrics = _trace_quality_metrics(trace)
+    st.subheader("Trace Quality")
+    q1, q2, q3, q4, q5 = st.columns(5)
+    with q1:
+        _metric_card("Trace score", f"{metrics['quality_score']}/{metrics['quality_score_max']}", "structural checks", METRIC_LIGHT_BLUE)
+    with q2:
+        _metric_card("References", f"{metrics['references'] - len(metrics['missing_refs'])}/{metrics['references']}", "resolved links", METRIC_LIGHT_BLUE)
+    with q3:
+        _metric_card("Attack typing", f"{metrics['typed_attacks']}/{metrics['attacks']}", "rebut/undercut/undermine", METRIC_LIGHT_BLUE)
+    with q4:
+        _metric_card("Warrants", f"{metrics['warranted_claims']}/{metrics['claims']}", "claims with reasons", METRIC_LIGHT_BLUE)
+    with q5:
+        _metric_card("AI reviewed", f"{metrics['ai_reviewed']}/{metrics['ai_events']}", "human consensus", METRIC_LIGHT_BLUE)
+
+    if metrics["missing_refs"] or metrics["self_refs"] or metrics["forward_refs"]:
+        st.warning("Trace integrity needs attention. Expand the details below to inspect problematic references.")
+    else:
+        st.success("The trace is structurally reconstructable: identifiers, references, chronology, and self-reference checks pass.")
+    st.markdown(
+        f"<p class='quality-note'>Unresolved challenges: <b>{metrics['unresolved_challenges']}</b>. "
+        f"Evidence-linked events: <b>{metrics['evidence_linked']}/{metrics['events']}</b>. "
+        "This panel checks trace structure, not scanner correctness or domain truth.</p>",
+        unsafe_allow_html=True,
+    )
+    with st.expander("Trace quality details", expanded=False):
+        st.json(metrics)
+
+
+def _formal_event_notation(event: ProofEvent, display_ids: Dict[str, str], temporal_by_internal_id: Dict[str, Dict[str, Any]]) -> str:
+    view = _apec_event_view(event, display_ids=display_ids)
+    event_id = display_ids.get(event.id, event.id)
+    premises = "; ".join(view["premises"]) or "current trace context"
+    claim = view["claim"]
+    warrant = view["warrant"] or "defeasible domain warrant"
+    refs = ", ".join(_display_refs(event.references or [], display_ids)) or "-"
+    temporal = temporal_by_internal_id.get(event.id, {})
+    lines = [
+        f"{event_id} = <communicate <Phi_{event_id}, c_{event_id}>, w_{event_id}>",
+        f"Phi_{event_id} = {{{premises}}}",
+        f"c_{event_id} = {claim}",
+        f"w_{event_id} = {warrant}",
+        f"type({event_id}) = {view['type']}",
+        f"Ref({event_id}) = {{{refs}}}",
+    ]
+    for predicate in ["Happens", "Initiates", "ActiveAt", "Clipped", "Terminates", "Valid"]:
+        value = temporal.get(predicate)
+        if value:
+            lines.append(str(value))
+    return "\n".join(lines)
+
+
+def _render_formal_apecps_view(trace: ProofTrace) -> None:
+    display_ids = _event_display_id_map(trace)
+    temporal_by_id = {row["internal_event_id"]: row for row in _compute_temporal_predicates(trace, display_ids=display_ids)}
+    st.caption("Formalized view of the operational trace using APEC-PS-style proof-event notation.")
+    max_events = st.slider("Formal events to show", 3, min(25, max(3, len(trace.events))), min(8, max(3, len(trace.events))), key="formal_apecps_limit")
+    for event in trace.events[:max_events]:
+        event_id = display_ids.get(event.id, event.id)
+        with st.expander(f"{event_id} · {event.actor} · {_apec_event_type(event)}", expanded=False):
+            st.code(_formal_event_notation(event, display_ids, temporal_by_id), language="text")
+
+
+def _debate_rounds(trace: ProofTrace) -> List[Tuple[str, str, List[ProofEvent]]]:
+    events = trace.events
+    rounds = [
+        (
+            "Round 1 Evidence",
+            "Scanner observations become APEC-PS premises and support observations.",
+            [
+                event for event in events
+                if event.actor == "CryptoDiscoveryAgent"
+                or event.kind == "premise"
+                or _apec_event_type(event) == "support_observation"
+            ],
+        ),
+        (
+            "Round 2 Risk Claim",
+            "Risk agents and AI analysts interpret the evidence as PQC exposure.",
+            [
+                event for event in events
+                if event.actor in {"QuantumRiskAgent", "ThreatIntelligenceAgent", "AI Risk Analyst", "AI Evidence Analyst"}
+                or _apec_event_type(event) in {"support_claim", "support_elaborate", "support_warrant"}
+            ],
+        ),
+        (
+            "Round 3 Counterargument",
+            "Critic and compatibility agents challenge weak evidence, unsafe assumptions, or immediate remediation.",
+            [event for event in events if _apec_main_event(event) == "attack"],
+        ),
+        (
+            "Round 4 Revised Plan",
+            "Planner and strategy events convert accepted risk into staged mitigation.",
+            [
+                event for event in events
+                if event.actor in {"MigrationPlannerAgent", "AI Migration Planner"}
+                or _apec_event_type(event) in {"support_strategy", "support_solution"}
+            ],
+        ),
+        (
+            "Round 5 Human Consensus",
+            "Human-review and validation events record whether the claim is accepted, deferred, rejected, or still pending.",
+            [event for event in events if _apec_main_event(event) == "validation" or event.actor in {"HumanReviewAgent", "AI Trust Reviewer"}],
+        ),
+    ]
+    deduped_rounds = []
+    for title, body, round_events in rounds:
+        seen: Set[str] = set()
+        deduped = []
+        for event in round_events:
+            if event.id in seen:
+                continue
+            seen.add(event.id)
+            deduped.append(event)
+        deduped_rounds.append((title, body, deduped))
+    return deduped_rounds
+
+
+def _render_debate_round_cards(trace: ProofTrace) -> None:
+    display_ids = _event_display_id_map(trace)
+    rounds = _debate_rounds(trace)
+    st.subheader("Debate Rounds")
+    tabs = st.tabs([title.replace("Round ", "R") for title, _, _ in rounds])
+    for tab, (title, body, round_events) in zip(tabs, rounds):
+        with tab:
+            st.markdown(f"**{title}**")
+            st.caption(body)
+            if not round_events:
+                st.info("No events in this round yet.")
+                continue
+            for event in round_events[:12]:
+                main_event = _apec_main_event(event)
+                accent = MAIN_EVENT_COLORS.get(main_event, "#0ea5e9")
+                refs = ", ".join(_display_refs(event.references or [], display_ids)) or "-"
+                st.markdown(
+                    f"""
+                    <div class="conversation-card" style="--agent-accent:{accent}">
+                      <div class="conversation-meta">{html.escape(display_ids.get(event.id, event.id))} · {html.escape(event.actor)} · {html.escape(_apec_event_type(event))}</div>
+                      <div class="conversation-claim">{html.escape(event.claim)}</div>
+                      <div class="conversation-refs">Refs: {html.escape(refs)}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
 
 def _event_option_label(event: Any, display_ids: Dict[str, str] | None = None) -> str:
@@ -4319,6 +4760,7 @@ def _build_argument_graph_html(
             color={"background": color, "border": border, "highlight": {"background": "#fef3c7", "border": "#f59e0b"}},
             shape="box",
             margin=8,
+            font={"size": 15, "face": "Arial", "color": "#0f172a", "bold": {"color": "#07185f"}},
             borderWidth=6 if is_unresolved else 5,
             shadow={"enabled": is_unresolved, "color": "rgba(220,38,38,0.42)", "size": 18, "x": 0, "y": 0},
             x=x,
@@ -4338,7 +4780,7 @@ def _build_argument_graph_html(
             arrows="to",
             dashes=ai_edge,
             width=3 if ai_edge else 2,
-            font={"align": "middle", "size": 11, "color": "#334155"},
+            font={"align": "middle", "size": 12, "face": "Arial", "color": "#334155"},
         )
 
     node_details = {
@@ -5009,6 +5451,7 @@ def _render_graph(trace: ProofTrace) -> None:
             },
             shape="box",
             margin=8,
+            font={"size": 15, "face": "Arial", "color": "#0f172a", "bold": {"color": "#07185f"}},
             borderWidth=7 if is_unresolved else 6 if node_id in projected_path_ids else 5,
             shadow={"enabled": is_unresolved, "color": "rgba(220,38,38,0.42)", "size": 18, "x": 0, "y": 0},
             opacity=1.0 if is_path else 0.35,
@@ -5049,7 +5492,7 @@ def _render_graph(trace: ProofTrace) -> None:
             arrows="to",
             width=3 if edge_in_path and projected_path_ids else 2 if ai_edge else 1,
             dashes=ai_edge or not edge_in_path,
-            font={"align": "middle", "size": 11, "color": "#334155"},
+            font={"align": "middle", "size": 12, "face": "Arial", "color": "#334155"},
         )
     if not visible_ids:
         st.info("No graph nodes match the search.")
@@ -5163,7 +5606,8 @@ def main() -> None:
         st.markdown("### Workflow")
         if "active_page" not in st.session_state:
             st.session_state.active_page = "Demo Mode"
-        for section_title, pages, captions in NAV_SECTIONS:
+        _normalize_active_page()
+        for section_title, pages, captions in _active_nav_sections():
             st.markdown(f"<div class='nav-section'>{section_title}</div>", unsafe_allow_html=True)
             key = f"nav_radio_{section_title}"
             if st.session_state.active_page in pages:
@@ -5184,6 +5628,8 @@ def main() -> None:
         step = st.session_state.active_page
         st.text_input("Project name", value=st.session_state.get("project_name", "default-project"), key="project_name_input")
 
+    _render_page_intro(step)
+
     if step == "Dashboard":
         _render_dashboard()
 
@@ -5193,10 +5639,10 @@ def main() -> None:
     elif step == "About":
         _render_about_page()
 
-    elif step == "Repository":
-        st.header("Repository")
+    elif step == "Evidence Sources":
+        st.header("Evidence Sources")
         st.write("Choose the evidence source that APEC-PS should scan for post-quantum cryptography migration risks.")
-        local_tab, zip_tab, github_tab = st.tabs(["Local path", "ZIP upload", "GitHub URL"])
+        local_tab, zip_tab, github_tab, tls_tab = st.tabs(["Repository", "ZIP upload", "GitHub URL", "Live TLS"])
         repo_path = st.session_state.get("repo_path", str(ROOT / "sample_repo"))
         source_label = st.session_state.get("repo_source", f"repository:{repo_path}")
         with local_tab:
@@ -5248,41 +5694,17 @@ def main() -> None:
                     st.success(f"Downloaded {source_label} to {repo_path}")
                 except Exception as exc:
                     st.error(f"GitHub download failed: {exc}")
-        repo_path = st.session_state.get("repo_path", repo_path)
-        source_label = st.session_state.get("repo_source", source_label)
-        st.session_state.repo_path = repo_path
-        exists = Path(repo_path).exists()
-        c1, c2 = st.columns([1, 2])
-        c1.metric("Source status", "Ready" if exists else "Missing")
-        c2.metric("Source", source_label)
-        if exists:
-            st.code(repo_path)
-        else:
-            _empty_state("No valid repository selected", "Select a local path, upload a ZIP archive, or download a public GitHub repository before scanning.")
-
-    elif step == "Findings":
-        st.header("Scan and review findings")
-        repo_path = st.session_state.get("repo_path", str(ROOT / "sample_repo"))
-        workers = st.slider("Parallel scanner workers", 1, 16, 6)
-        if st.button("Run scanner", type="primary"):
-            with st.spinner("Scanning repository with static analysis and heuristics"):
-                st.session_state.findings = scan_repository(repo_path, max_workers=workers)
-                scan_id = _save_scan(
-                    st.session_state.get("project_name_input") or Path(repo_path).name,
-                    st.session_state.get("repo_source") or f"repository:{repo_path}",
-                    st.session_state.findings,
-                    st.session_state.get("proof_trace"),
-                )
-                st.session_state.last_scan_id = scan_id
-            st.success(f"Found {len(st.session_state.findings)} potential issues")
-
-        with st.expander("Live TLS endpoint scan"):
+        with tls_tab:
+            st.markdown(
+                "<div class='source-card'><h4>Live TLS endpoints</h4><p>Scan deployed HTTPS/TLS endpoints as runtime evidence. Endpoint findings are stored with the same findings table as repository evidence.</p></div>",
+                unsafe_allow_html=True,
+            )
             st.caption("Enter one endpoint per line. Formats: example.com, example.com:8443, https://example.com.")
-            endpoints_text = st.text_area("Endpoints", placeholder="example.com\napi.example.com:443")
-            endpoint_timeout = st.slider("Endpoint timeout seconds", 1, 15, 5)
-            endpoint_workers = st.slider("Endpoint scanner workers", 1, 12, 4)
-            append_results = st.checkbox("Append endpoint findings to repository findings", value=True)
-            if st.button("Scan endpoints"):
+            endpoints_text = st.text_area("Endpoints", placeholder="example.com\napi.example.com:443", key="tls_endpoints_text")
+            endpoint_timeout = st.slider("Endpoint timeout seconds", 1, 15, 5, key="tls_endpoint_timeout")
+            endpoint_workers = st.slider("Endpoint scanner workers", 1, 12, 4, key="tls_endpoint_workers")
+            append_results = st.checkbox("Append endpoint findings to existing findings", value=True, key="tls_append_results")
+            if st.button("Scan live TLS endpoints", type="primary"):
                 endpoints = [line.strip() for line in endpoints_text.splitlines() if line.strip()]
                 if not endpoints:
                     st.warning("Enter at least one endpoint.")
@@ -5300,8 +5722,35 @@ def main() -> None:
                         st.session_state.get("proof_trace"),
                     )
                     st.session_state.last_scan_id = scan_id
-                    st.success(f"Endpoint scan produced {len(endpoint_findings)} findings")
+                    st.session_state.active_page = "Crypto Findings"
+                    st.success(f"Endpoint scan produced {len(endpoint_findings)} findings. Open Crypto Findings to inspect them.")
+        repo_path = st.session_state.get("repo_path", repo_path)
+        source_label = st.session_state.get("repo_source", source_label)
+        st.session_state.repo_path = repo_path
+        exists = Path(repo_path).exists()
+        c1, c2 = st.columns([1, 2])
+        c1.metric("Source status", "Ready" if exists else "Missing")
+        c2.metric("Source", source_label)
+        if exists:
+            st.code(repo_path)
+            workers = st.slider("Repository scanner workers", 1, 16, 6, key="evidence_source_workers")
+            if st.button("Scan selected repository/artifacts", type="primary"):
+                with st.spinner("Scanning repository with static analysis and heuristics"):
+                    st.session_state.findings = scan_repository(repo_path, max_workers=workers)
+                    scan_id = _save_scan(
+                        st.session_state.get("project_name_input") or Path(repo_path).name,
+                        st.session_state.get("repo_source") or f"repository:{repo_path}",
+                        st.session_state.findings,
+                        st.session_state.get("proof_trace"),
+                    )
+                    st.session_state.last_scan_id = scan_id
+                    st.session_state.active_page = "Crypto Findings"
+                st.success(f"Found {len(st.session_state.findings)} potential issues. Open Crypto Findings to inspect them.")
+        else:
+            _empty_state("No valid repository selected", "Select a local path, upload a ZIP archive, or download a public GitHub repository before scanning.")
 
+    elif step == "Crypto Findings":
+        st.header("Crypto Findings")
         findings = st.session_state.get("findings", [])
         if findings:
             high = sum(1 for f in findings if f.get("severity") == "high")
@@ -5314,13 +5763,13 @@ def main() -> None:
             c4.metric("Low", low)
             _render_findings(findings)
         else:
-            _empty_state("No findings yet", "Run the repository scanner, scan live TLS endpoints, or use Demo Mode to create a complete example with findings and agent reasoning.")
+            _empty_state("No findings yet", "Use Evidence Sources to scan a repository, upload, GitHub project, or live TLS endpoint. Demo Mode can also create a complete example with findings and agent reasoning.")
 
-    elif step == "Review":
+    elif step == "Human Review":
         _render_review_page()
 
-    elif step == "Agents":
-        st.header("Multi-agent reasoning")
+    elif step == "Agent Reasoning":
+        st.header("Agent Reasoning")
         findings = st.session_state.get("findings", [])
         if not findings:
             _empty_state("Agents need scanner evidence", "Run a scan first so the Discovery, Risk, Compliance, Planning, Critic, and Human Review agents have findings to reason over.")
@@ -5348,10 +5797,11 @@ def main() -> None:
         trace = st.session_state.get("proof_trace")
         if trace:
             _render_trace(trace)
+            _render_trace_quality_panel(trace)
         else:
             _empty_state("No proof trace yet", "Select the agents you want and click Run agents to create the APEC-PS support, attack, warrant, claim, and validation events.")
 
-    elif step == "Debate":
+    elif step == "Agent Debate":
         _render_debate_view(st.session_state.get("proof_trace"))
 
     elif step == "Agentic AI":
@@ -5364,7 +5814,7 @@ def main() -> None:
         st.header("Persistent scan history")
         scans = _list_scans(limit=50)
         if not scans:
-            st.info("No saved scans yet. Run a repository or endpoint scan first.")
+            st.info("No saved scans yet. Run an evidence-source scan first.")
             return
         st.dataframe(pd.DataFrame(scans), use_container_width=True, hide_index=True)
         selected_scan_id = st.selectbox(
@@ -5386,8 +5836,8 @@ def main() -> None:
                 st.success(f"Loaded scan #{payload['id']}")
                 st.rerun()
 
-    elif step == "Report":
-        st.header("Export report")
+    elif step == "Reports":
+        st.header("Reports")
         findings = st.session_state.get("findings", [])
         trace = st.session_state.get("proof_trace")
         if not findings:

@@ -23,7 +23,9 @@ and security-workflow prototyping. It is not a production security scanner.
 ## Key Features
 
 - **Demo Mode** for one-click university presentations, including optional
-  Agentic AI quick run and argument-graph preview.
+  Agentic AI quick run, argument-graph preview, and human review.
+- **Grouped sidebar workflow** with Overview, Input, Reasoning, and Output
+  sections for clearer research demonstrations.
 - **Academic and operational report exports** with distinct research-facing
   and security-facing content.
 - **Guided presentation walkthrough** for a clear live-demo narrative.
@@ -43,6 +45,12 @@ and security-workflow prototyping. It is not a production security scanner.
   support/attack/validation moves.
 - **Interactive argument graph** with layouts, search, path highlighting,
   grouping, legends, and unresolved attack markers.
+- **Trace Quality panel** that checks identifier uniqueness, reference
+  integrity, chronology, attack typing, warrant coverage, evidence links, and
+  human consensus over AI arguments.
+- **Formal APEC-PS view** that renders selected proof events using
+  `e = <communicate <Phi, c>, w>` notation and temporal predicates such as
+  `Happens`, `Initiates`, `ActiveAt`, `Clipped`, `Terminates`, and `Valid`.
 - **Simplified graph semantics** with three main node categories:
   support event, attack/unresolved event, and validation event. Finer APEC-PS
   types such as `support_observation`, `support_elaborate`,
@@ -50,7 +58,7 @@ and security-workflow prototyping. It is not a production security scanner.
   `attack_rebut`, and `validation_accept` are stored as metadata.
 - **Readable proof-event identifiers** such as `PE1`, `PE2`, and `PE3` in the
   graph, proof-event trace, JSON export, and temporal predicates.
-- **Review workflow** with finding-to-decision view, trace links, remediation
+- **Human Review workflow** with reviewer decision first, finding-to-decision view, trace links, remediation
   playbook, reviewer, reason, status, and expiry.
 - **Persistent scan history** using local SQLite.
 - **Report exports** in Markdown, PDF, JSON, SARIF, HTML, and standalone graph
@@ -126,25 +134,27 @@ http://localhost:8501
 
 ## Quick University Demo
 
-The fastest presentation flow is:
+The fastest presentation flow uses the grouped sidebar workflow:
 
 1. Open the app.
 2. Go to **Demo Mode**.
 3. Select whether to include **Agentic AI quick run** and **Show argument
    graph after run**.
-4. Click **Load Demo Scenario**.
+4. Click **Run selected demo scenario**.
 5. In Demo Mode, present the tabs in this order:
-   **Argument graph**, **Finding-to-decision**, **Reports**, and
-   **PQC secure exchange**.
-6. Go to **Dashboard** to show the executive overview.
-7. Go to **Agents** to show selected specialist agents and the deterministic
+   **Argument graph**, **Human review**, **Finding-to-decision**,
+   **Reports**, and **PQC secure exchange**.
+6. Go to **Crypto Findings** to show the scanner evidence.
+7. Go to **Agent Reasoning** to show selected specialist agents and the deterministic
    proof-event trace.
-8. Go to **Agentic AI** to show the central coordinator, AI role-agents,
-   debate rounds, and human consensus over AI arguments.
-9. Go to **Review** to show finding-to-decision, trace links, remediation
-   playbook, and human review.
-10. Go to **Report** to export the academic report, operational report,
+8. Go to **Human Review** to record a decision, inspect finding-to-decision,
+   trace links, and remediation playbook.
+9. Go to **Reports** to export the academic report, operational report,
     security tooling formats, or PQC-protected package.
+
+The sidebar is organized into **Overview**, **Input**, **Reasoning**, and
+**Output** categories so audiences can see where each part of the prototype
+belongs.
 
 Demo Mode automatically:
 
@@ -155,6 +165,28 @@ Demo Mode automatically:
 - creates the APEC-PS proof trace
 - saves a scan-history snapshot
 - prepares the dashboard, graph, review view, reports, and PQC secure exchange
+
+### Short Presentation Script
+
+Use this script for a 5-7 minute live demo:
+
+1. **Problem framing**: "The prototype demonstrates how Agentic AI can support
+   PQC migration triage while preserving an auditable APEC-PS reasoning trace."
+2. **Run demo**: "Demo Mode loads a sample repository, scans cryptographic
+   evidence, runs specialist agents, and optionally adds AI coordinator
+   arguments."
+3. **Trace quality**: "Before trusting the output, the app checks whether proof
+   events have unique IDs, valid references, typed attacks, warrants, evidence
+   links, and human-review status."
+4. **Argument graph**: "The graph shows three main event types: support,
+   attack, and validation. Details such as premises, warrants, and claims are
+   preserved in node metadata."
+5. **Formal APEC-PS view**: "For the paper, each event can also be rendered as
+   `PEi = <communicate <Phi, c>, w>` with temporal predicates such as
+   `Happens(PEi, ti)` and `Valid(PEi, f, ti)`."
+6. **Review and reports**: "The Human Review menu records the final governance
+   decision, and the Reports menu exports either academic or operational
+   evidence packages."
 
 ## How To Use Each Page
 
@@ -194,27 +226,30 @@ Options:
 
 Button:
 
-- **Load Demo Scenario**: scans `sample_repo`, runs agents, saves history, and
+- **Run selected demo scenario**: scans `sample_repo`, runs agents, saves history, and
   prepares all app views.
 
 Demo output tabs:
 
 - **Argument graph**
+- **Human review**
 - **Finding-to-decision**
 - **Reports**
 - **PQC secure exchange**
 
 Use this for a reliable live presentation.
 
-### Repository
+### Evidence Sources
 
-Selects the source to scan.
+Selects the evidence source to scan. This page keeps input collection separate
+from the results table.
 
-Fields:
+Tabs:
 
-- **Path accessible to this app**: local directory path scanned by the app.
-- **Upload ZIP archive**: upload a zipped project/repository.
-- **GitHub repository URL**: download and scan a public GitHub repository.
+- **Repository**: select a local directory path scanned by the app.
+- **ZIP upload**: upload a zipped project/repository.
+- **GitHub URL**: download and scan a public GitHub repository.
+- **Live TLS**: scan deployed HTTPS/TLS endpoints as runtime evidence.
 
 Supported GitHub examples:
 
@@ -237,16 +272,38 @@ Recommended ZIP content:
 Do not upload real secrets, private keys, or proprietary repositories in a
 public demo.
 
-### Findings
+#### Live TLS Endpoint Scan
 
-Runs scans and presents normalized scanner output. Human review, trace links,
-finding-to-decision explanation, and remediation playbooks are handled in the
-separate **Review** page so the scanner output stays clean.
+Use this tab to scan deployed HTTPS/TLS endpoints.
+
+Examples:
+
+```text
+example.com
+api.example.com:443
+https://payments.example.com
+```
+
+Fields:
+
+- **Endpoints**: one endpoint per line.
+- **Endpoint timeout seconds**: connection timeout.
+- **Endpoint scanner workers**: concurrent endpoint scans.
+- **Append endpoint findings**: add endpoint results to existing findings
+  instead of replacing them.
+
+The endpoint scanner checks TLS version, cipher, certificate public key, and
+certificate signature algorithm.
+
+### Crypto Findings
+
+Presents normalized scanner output from the selected evidence source. Human
+review, trace links, finding-to-decision explanation, and remediation playbooks
+are handled in the separate **Human Review** page so the scanner output stays
+clean.
 
 Controls:
 
-- **Parallel scanner workers**: number of scanning threads.
-- **Run scanner**: scans the selected repository.
 - **Severity filter**: filters visible findings.
 - **Minimum risk score**: hides lower-priority findings.
 
@@ -267,36 +324,14 @@ Findings table:
 - **evidence**: code/config/certificate evidence.
 - **description**: risk explanation.
 
-#### Live TLS Endpoint Scan
+### Human Review
 
-Use this to scan deployed HTTPS/TLS endpoints.
-
-Examples:
-
-```text
-example.com
-api.example.com:443
-https://payments.example.com
-```
-
-Fields:
-
-- **Endpoints**: one endpoint per line.
-- **Endpoint timeout seconds**: connection timeout.
-- **Endpoint scanner workers**: concurrent endpoint scans.
-- **Append endpoint findings**: add endpoint results to repository findings
-  instead of replacing them.
-
-The endpoint scanner checks TLS version, cipher, certificate public key, and
-certificate signature algorithm.
-
-### Review
-
-The Review page is the first page in the output menu. It connects raw scanner
+The Human Review page is the first page in the Output menu. It connects raw scanner
 findings to APEC-PS reasoning and human decision-making.
 
 Tabs:
 
+- **Human review**: records the human disposition for the selected finding.
 - **Finding-to-decision**: summarizes how the selected finding moves from
   evidence to risk interpretation, challenge, migration plan, and decision
   state.
@@ -304,7 +339,6 @@ Tabs:
   downstream agents used those events.
 - **Remediation playbook**: lists concrete mitigation steps, owner guidance,
   evidence to collect, and review notes.
-- **Human review**: records the human disposition for the selected finding.
 
 Statuses:
 
@@ -324,7 +358,7 @@ Fields:
 Saving a review decision stores it in SQLite and, if a proof trace exists,
 adds a HumanReview proof event.
 
-### Agents
+### Agent Reasoning
 
 Runs selectable deterministic specialist agents over the current findings.
 This page is used to build the auditable baseline trace before, or alongside,
@@ -386,7 +420,11 @@ details.
 ### Argument Graphs
 
 The Argument Graphs page visualizes the APEC-PS proof trace. It is separate
-from Agents so the user can first generate a trace, then inspect it as a graph.
+from Agent Reasoning so the user can first generate a trace, then inspect it as a graph.
+
+After the graph, the page shows **Trace Quality**, which summarizes structural integrity:
+unique IDs, reference resolution, attack typing, warrant coverage, evidence
+links, unresolved challenges, and human consensus over AI-generated arguments.
 
 Argument graph controls:
 
@@ -422,21 +460,31 @@ Argumentation moves:
 - **Validation link**: connects human or review events to the claim or plan
   being decided.
 
-### Debate
+Additional views:
 
-Explains the research contribution of APEC-PS.
+- **Formal APEC-PS view**: renders proof events as
+  `PEi = <communicate <Phi, c>, w>` and displays temporal predicates.
+- **Temporal predicates**: shows the computed operational state for each
+  event, including `Happens`, `Initiates`, `ActiveAt`, `Clipped`,
+  `Terminates`, and `Valid`.
+- **Proof-event trace table**: provides the raw tabular trace for inspection
+  and export comparison.
 
-It separates:
+### Agent Debate
 
-- support arguments
-- attack/critique arguments
-- warrants
-- migration claims
-- validation events
-- unresolved challenges
+Explains the APEC-PS contribution as a round-based agent conversation rather
+than a flat event list. The Debate page groups proof events into:
 
-Use this page to explain why the system is not just a scanner: it creates an
-argumentation structure around the security findings.
+- **Round 1 Evidence**: scanner observations and discovery support.
+- **Round 2 Risk Claim**: PQC risk interpretation and supporting arguments.
+- **Round 3 Counterargument**: rebutting, undercutting, and undermining moves.
+- **Round 4 Revised Plan**: staged migration strategy and mitigation plan.
+- **Round 5 Human Consensus**: validation, deferral, risk acceptance, or
+  review requirement.
+
+Use this page to explain why the system is not just a scanner. It creates an
+argumentation structure around the security findings and shows how agents move
+from evidence to disagreement, revision, and governance.
 
 ### Agentic AI
 
@@ -543,7 +591,7 @@ Columns:
 Use **Load selected scan into workspace** to restore previous findings and
 proof trace.
 
-### Report
+### Reports
 
 Exports results through separate report types. The two main reports have
 different audiences:
@@ -652,7 +700,7 @@ The project includes an optional sample ZIP:
 sample_upload_repo.zip
 ```
 
-Upload it through **Repository > Upload ZIP archive** to test a different
+Upload it through **Evidence Sources > ZIP upload** to test a different
 scenario from `sample_repo`.
 
 ## Deploy On Streamlit Community Cloud
