@@ -55,6 +55,8 @@ KIND_COLORS = {
     "attack": "#dc2626",
     "warrant": "#7c3aed",
     "claim": "#0f766e",
+    "request": "#0891b2",
+    "revision": "#0f766e",
     "validation": "#334155",
 }
 MAIN_EVENT_COLORS = {
@@ -68,6 +70,8 @@ KIND_ICONS = {
     "attack": "[attack]",
     "warrant": "[warrant]",
     "claim": "[plan]",
+    "request": "[request]",
+    "revision": "[revision]",
     "validation": "[review]",
 }
 EDGE_MOVE_LABELS = {
@@ -76,6 +80,8 @@ EDGE_MOVE_LABELS = {
     "attack": "attack relation",
     "warrant": "warrant link",
     "claim": "claim link",
+    "request": "evidence request",
+    "revision": "revision link",
     "validation": "validation link",
 }
 EDGE_MOVE_DESCRIPTIONS = {
@@ -84,6 +90,8 @@ EDGE_MOVE_DESCRIPTIONS = {
     "attack": "Attack relation: the target proof-event challenges the referenced event, usually as a rebuttal, undercut, or undermining move.",
     "warrant": "Warrant link: the target proof-event explains the reasoning rule that connects evidence to a claim.",
     "claim": "Claim link: the target proof-event proposes a decision, conclusion, or mitigation plan based on referenced events.",
+    "request": "Evidence request: the target proof-event asks for more evidence before the referenced event is accepted.",
+    "revision": "Revision link: the target proof-event revises a previous claim or plan in response to an objection or new evidence.",
     "validation": "Validation link: the target proof-event records review, acceptance, rejection, deferral, or risk acceptance for the referenced event.",
 }
 EDGE_MOVE_COLORS = {
@@ -91,6 +99,8 @@ EDGE_MOVE_COLORS = {
     "attack": "#dc2626",
     "warrant": "#7c3aed",
     "claim": "#0f766e",
+    "request": "#0891b2",
+    "revision": "#0f766e",
     "validation": "#334155",
     "premise": "#94a3b8",
 }
@@ -114,6 +124,11 @@ AI_ROLE_DESCRIPTIONS = {
     "migration_recommendation": "Turns the accepted risk into a staged mitigation warrant or plan.",
     "counterargument": "Challenges unsafe migration assumptions, weak evidence, and compatibility risk.",
     "human_review_request": "Checks whether the AI argument is ready for human consensus or still blocked.",
+}
+HUMAN_CHALLENGE_TYPES = {
+    "Premise": "undermine",
+    "Warrant": "undercut",
+    "Claim": "rebut",
 }
 CORE_SPECIALIST_AGENT_NAMES = [
     "CryptoDiscoveryAgent",
@@ -161,34 +176,36 @@ DEMO_SCENARIOS = {
 PAGE_ALIASES = {
     "Repository": "Evidence Sources",
     "Findings": "Crypto Findings",
-    "Agents": "Agent Reasoning",
+    "Agents": "Agent & Human Reasoning",
+    "Agent Reasoning": "Agent & Human Reasoning",
     "Debate": "Agent Debate",
-    "Review": "Human Review",
+    "Review": "Final Human Decision",
+    "Human Review": "Final Human Decision",
     "Report": "Reports",
 }
 SIMPLE_NAV_SECTIONS = [
     (
         "SIMPLE MODE",
-        ["Demo Mode", "Crypto Findings", "Agent Reasoning", "Human Review", "Reports"],
-        ["Run demo", "See findings", "See agent reasoning", "Review decision", "Export report - PQC secure exchange"],
+        ["Demo Mode", "Crypto Findings", "Dashboard", "Agent & Human Reasoning", "Final Human Decision", "Reports"],
+        ["Run demo", "See findings", "Executive summary", "See agent reasoning", "Review decision", "Export report - PQC secure exchange"],
     ),
     (
         "ADVANCED",
-        ["Dashboard", "Evidence Sources", "Agentic AI", "Argument Graphs", "Agent Debate", "History", "About"],
-        ["Executive summary", "Select source", "Central AI coordinator", "Graph inspection", "Argumentation view", "Past scans", "Author and rights"],
+        ["Evidence Sources", "Agentic AI", "Argument Graphs", "Agent Debate", "History", "About"],
+        ["Select source", "Central AI coordinator", "Graph inspection", "Argumentation view", "Past scans", "Author and rights"],
     ),
 ]
 FULL_NAV_SECTIONS = [
-    ("OVERVIEW", ["Demo Mode", "Dashboard", "About"], ["One-click scenario", "Executive summary", "Author and rights"]),
-    ("INPUT", ["Evidence Sources", "Crypto Findings"], ["Select source", "Scan findings"]),
-    ("REASONING", ["Agent Reasoning", "Agentic AI", "Argument Graphs", "Agent Debate"], ["Specialist trace", "Central AI coordinator", "Graph inspection", "Argumentation view"]),
-    ("OUTPUT", ["Human Review", "History", "Reports"], ["Human decision", "Past scans", "Export evidence"]),
+    ("QUICK VIEW", ["Demo Mode", "About"], ["One-click scenario", "Author and rights"]),
+    ("INPUT", ["Evidence Sources", "Crypto Findings", "Dashboard"], ["Select source", "Scan findings", "Executive summary"]),
+    ("REASONING", ["Agent & Human Reasoning", "Agentic AI", "Argument Graphs", "Agent Debate"], ["Specialist trace and human actions", "Central AI coordinator", "Graph inspection", "Argumentation view"]),
+    ("OUTPUT", ["Final Human Decision", "History", "Reports"], ["Final decision", "Past scans", "Export evidence"]),
 ]
 PAGE_EXPLANATIONS = {
     "Demo Mode": "Run a guided end-to-end scenario: scan evidence, run agents, inspect the graph, review a decision, and export reports.",
     "Crypto Findings": "Review the cryptographic evidence detected in code, configuration, certificates, and TLS endpoints.",
-    "Agent Reasoning": "Run selected specialist agents and inspect the generated APEC-PS proof-event trace.",
-    "Human Review": "Record the human disposition, inspect finding-to-decision reasoning, and view trace links and remediation playbooks.",
+    "Agent & Human Reasoning": "Run specialist agents, inspect the generated APEC-PS proof-event trace, and add human review actions to proof events.",
+    "Final Human Decision": "Record the final human disposition, inspect finding-to-decision reasoning, and view trace links and remediation playbooks.",
     "Reports": "Export academic, operational, tooling, and PQC-protected evidence packages.",
     "Dashboard": "Summarize risk posture, review status, and unresolved argumentation challenges.",
     "Evidence Sources": "Choose static repositories, uploaded archives, GitHub projects, or live TLS endpoints as scan inputs.",
@@ -1075,8 +1092,8 @@ def _render_presentation_walkthrough() -> None:
     steps = [
         ("1", "Run demo", "Use Demo Mode to scan a bundled repository and generate the APEC-PS proof trace."),
         ("2", "See findings", "Open Crypto Findings to inspect the detected PQC-relevant evidence."),
-        ("3", "See reasoning", "Open Agent Reasoning to inspect the specialist proof-event trace."),
-        ("4", "Review decision", "Open Human Review to record the human disposition and inspect the decision path."),
+        ("3", "See reasoning", "Open Agent & Human Reasoning to inspect the specialist proof-event trace and add human actions."),
+        ("4", "Review decision", "Open Final Human Decision to record the human disposition and inspect the decision path."),
         ("5", "Export report", "Open Reports to export academic, operational, tooling, or PQC secure exchange packages."),
     ]
     cols = st.columns(5)
@@ -1379,7 +1396,257 @@ def _render_finding_to_decision(finding: Dict[str, Any], trace: ProofTrace | Non
         st.markdown("**Linked reasoning summary**")
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     else:
-        st.info("Run the Agent Reasoning page after scanning to show the complete finding-to-decision reasoning path.")
+        st.info("Run the Agent & Human Reasoning page after scanning to show the complete finding-to-decision reasoning path.")
+
+
+def _default_event_for_review(trace: ProofTrace, candidate_events: List[ProofEvent] | None = None) -> str:
+    events = candidate_events or trace.events
+    for kind in ["claim", "warrant", "support", "premise", "attack", "validation", "request", "revision"]:
+        matches = [event for event in events if event.kind == kind]
+        if matches:
+            return matches[-1].id
+    return trace.events[-1].id if trace.events else ""
+
+
+def _append_human_trace_action(
+    trace: ProofTrace,
+    selected_event: ProofEvent,
+    action: str,
+    reviewer: str,
+    comment: str,
+    challenge_target: str | None = None,
+    disposition: str | None = None,
+) -> ProofEvent:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    display_ids = _event_display_id_map(trace)
+    target_label = display_ids.get(selected_event.id, selected_event.id)
+    if action == "Challenge reasoning":
+        attack_type = HUMAN_CHALLENGE_TYPES.get(challenge_target or "Warrant", "undercut")
+        event = ProofEvent(
+            actor="HumanReviewAgent",
+            kind="attack",
+            claim=comment,
+            references=[selected_event.id],
+            metadata={
+                "type": f"attack_{attack_type}",
+                "apec_type": f"attack_{attack_type}",
+                "attack_type": attack_type,
+                "challenge_target": challenge_target,
+                "reviewer": reviewer,
+                "reviewer_generated": True,
+                "target_event": target_label,
+                "target_kind": selected_event.kind,
+                "target_type": _apec_event_type(selected_event),
+                "timestamp": timestamp,
+            },
+        )
+    elif action == "Request evidence":
+        event = ProofEvent(
+            actor="HumanReviewAgent",
+            kind="request",
+            claim=comment or f"Request additional evidence before accepting {target_label}.",
+            references=[selected_event.id],
+            metadata={
+                "type": "request_evidence",
+                "apec_type": "request_evidence",
+                "reviewer": reviewer,
+                "reviewer_generated": True,
+                "target_event": target_label,
+                "target_kind": selected_event.kind,
+                "target_type": _apec_event_type(selected_event),
+                "timestamp": timestamp,
+            },
+        )
+    else:
+        status = "accepted" if disposition == "Accept" else "deferred"
+        event = ProofEvent(
+            actor="HumanReviewAgent",
+            kind="validation",
+            claim=comment or f"{target_label} marked {status} by {reviewer}.",
+            references=[selected_event.id],
+            metadata={
+                "type": "validation_accept" if status == "accepted" else "validation_defer",
+                "apec_type": "validation_accept" if status == "accepted" else "validation_defer",
+                "status": status,
+                "reviewer": reviewer,
+                "reviewer_generated": True,
+                "target_event": target_label,
+                "target_kind": selected_event.kind,
+                "target_type": _apec_event_type(selected_event),
+                "timestamp": timestamp,
+            },
+        )
+    trace.add_event(event)
+    st.session_state.proof_trace = trace
+    scan_id = _save_scan(
+        st.session_state.get("project_name_input") or st.session_state.get("project_name", "default-project"),
+        f"human-action:{selected_event.id}",
+        st.session_state.get("findings", []),
+        trace,
+    )
+    st.session_state.last_scan_id = scan_id
+    return event
+
+
+def _render_human_trace_action_panel(
+    trace: ProofTrace | None,
+    key_prefix: str,
+    candidate_events: List[ProofEvent] | None = None,
+) -> None:
+    st.subheader("Human review action")
+    st.caption("Create a reviewer-generated proof event that requests evidence, challenges reasoning, or accepts/defers a trace event.")
+    if not trace or not trace.events:
+        st.info("Run Agent & Human Reasoning first to create proof events that can be reviewed.")
+        return
+
+    display_ids = _event_display_id_map(trace)
+    events = candidate_events or trace.events
+    event_ids = [event.id for event in events]
+    default_id = _default_event_for_review(trace, events)
+    default_index = event_ids.index(default_id) if default_id in event_ids else 0
+    selected_event_id = st.selectbox(
+        "Proof event to review",
+        event_ids,
+        index=default_index,
+        format_func=lambda event_id: _event_option_label(next(event for event in trace.events if event.id == event_id), display_ids),
+        key=f"{key_prefix}_event",
+    )
+    selected_event = next(event for event in trace.events if event.id == selected_event_id)
+    action = st.radio(
+        "Human review action",
+        ["Request evidence", "Challenge reasoning", "Accept / defer"],
+        horizontal=True,
+        key=f"{key_prefix}_action",
+    )
+    reviewer = st.text_input("Reviewer", value=st.session_state.get(f"{key_prefix}_reviewer_default", "Human reviewer"), key=f"{key_prefix}_reviewer")
+    challenge_target = None
+    disposition = None
+    if action == "Challenge reasoning":
+        challenge_target = st.selectbox(
+            "Challenge target",
+            ["Premise", "Warrant", "Claim"],
+            key=f"{key_prefix}_challenge_target",
+            help="Premise -> undermine, Warrant -> undercut, Claim -> rebut.",
+        )
+        st.caption(f"APEC-PS attack type: `{HUMAN_CHALLENGE_TYPES[challenge_target]}`")
+        comment_label = "Reason for challenge"
+    elif action == "Accept / defer":
+        disposition = st.selectbox("Decision", ["Accept", "Defer"], key=f"{key_prefix}_disposition")
+        comment_label = "Reason for decision"
+    else:
+        comment_label = "Evidence requested"
+    comment = st.text_area(comment_label, key=f"{key_prefix}_comment")
+    if st.button("Submit human review action", type="primary", key=f"{key_prefix}_submit"):
+        if not reviewer.strip():
+            st.warning("Reviewer is required.")
+            return
+        if action == "Challenge reasoning" and not comment.strip():
+            st.warning("Reason for challenge is required.")
+            return
+        created = _append_human_trace_action(
+            trace,
+            selected_event,
+            action,
+            reviewer.strip(),
+            comment.strip(),
+            challenge_target=challenge_target,
+            disposition=disposition,
+        )
+        refreshed_display_ids = _event_display_id_map(trace)
+        st.success(f"Created {refreshed_display_ids.get(created.id, created.id)} as a {created.kind} proof event. Refreshing trace.")
+        st.rerun()
+
+
+def _lineage_rows(events: List[ProofEvent], display_ids: Dict[str, str]) -> List[Dict[str, str]]:
+    return [
+        {
+            "event": display_ids.get(event.id, event.id),
+            "actor": event.actor,
+            "type": _apec_event_type(event),
+            "claim": event.claim,
+            "references": ", ".join(_display_refs(event.references or [], display_ids)) or "-",
+        }
+        for event in events
+    ]
+
+
+def _ancestor_events(events_by_id: Dict[str, ProofEvent], selected_id: str) -> List[ProofEvent]:
+    ordered: List[ProofEvent] = []
+    seen: Set[str] = set()
+
+    def visit(event_id: str) -> None:
+        event = events_by_id.get(event_id)
+        if not event:
+            return
+        for ref in event.references or []:
+            visit(ref)
+        if event_id not in seen:
+            ordered.append(event)
+            seen.add(event_id)
+
+    visit(selected_id)
+    return ordered
+
+
+def _render_reviewer_explanation_views(
+    trace: ProofTrace | None,
+    key_prefix: str,
+    default_event_id: str | None = None,
+) -> None:
+    st.subheader("Reviewer explanation questions")
+    if not trace or not trace.events:
+        st.info("Run Agent & Human Reasoning first to inspect why/why-not/what-changed explanations.")
+        return
+    display_ids = _event_display_id_map(trace)
+    events_by_id = {event.id: event for event in trace.events}
+    options = [event.id for event in trace.events]
+    default_index = options.index(default_event_id) if default_event_id in options else max(0, len(options) - 1)
+    selected_event_id = st.selectbox(
+        "Recommendation or proof event",
+        options,
+        index=default_index,
+        format_func=lambda event_id: _event_option_label(events_by_id[event_id], display_ids),
+        key=f"{key_prefix}_why_event",
+    )
+    selected_event = events_by_id[selected_event_id]
+    why_tab, why_not_tab, changed_tab = st.tabs(["Why?", "Why not?", "What changed?"])
+    with why_tab:
+        st.caption("Shows the selected recommendation together with supporting warrants, evidence, and referenced scanner findings.")
+        ancestors = _ancestor_events(events_by_id, selected_event_id)
+        supporting = [
+            event for event in ancestors
+            if event.id == selected_event_id or event.kind in {"premise", "support", "warrant", "claim"}
+        ]
+        st.dataframe(pd.DataFrame(_lineage_rows(supporting, display_ids)), use_container_width=True, hide_index=True)
+    with why_not_tab:
+        st.caption("Shows objections that target the selected recommendation or events in its supporting path.")
+        path_ids = {event.id for event in _ancestor_events(events_by_id, selected_event_id)}
+        attacks = [
+            event for event in trace.events
+            if event.kind == "attack" and (selected_event_id in (event.references or []) or bool(path_ids & set(event.references or [])))
+        ]
+        if attacks:
+            st.dataframe(pd.DataFrame(_lineage_rows(attacks, display_ids)), use_container_width=True, hide_index=True)
+        else:
+            st.info("No attack event directly challenges this recommendation or its supporting path.")
+    with changed_tab:
+        st.caption("Shows a compact path from initial proposal, through objection, to revised proposal and human decision.")
+        path_ids = _connected_path_ids(events_by_id, selected_event_id)
+        path_events = [event for event in trace.events if event.id in path_ids]
+        stages = [
+            ("Initial proposal", [event for event in path_events if event.kind in {"claim", "support", "warrant"}][:2]),
+            ("Objection", [event for event in path_events if event.kind == "attack"][:3]),
+            ("Revised proposal", [event for event in path_events if event.kind == "revision" or event.metadata.get("argument_role") in {"debate_revision", "migration_recommendation"}][:3]),
+            ("Human decision", [event for event in path_events if event.kind == "validation" or event.actor == "HumanReviewAgent"][:3]),
+        ]
+        rows = []
+        for stage, stage_events in stages:
+            if stage_events:
+                for event in stage_events:
+                    rows.append({"stage": stage, **_lineage_rows([event], display_ids)[0]})
+            else:
+                rows.append({"stage": stage, "event": "-", "actor": "-", "type": "-", "claim": "No event recorded for this stage.", "references": "-"})
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
 def _render_polished_report_preview(findings: List[Dict[str, Any]], trace: ProofTrace | None) -> None:
@@ -1588,7 +1855,7 @@ def _render_demo_mode() -> None:
         university_html = _build_university_html_report(findings, trace, graph_html)
 
         graph_tab, review_tab, decision_tab, report_tab, secure_tab = st.tabs(
-            ["Argument graph", "Human review", "Finding-to-decision", "Reports", "PQC secure exchange"]
+            ["Argument graph", "Final human decision", "Finding-to-decision", "Reports", "PQC secure exchange"]
         )
         with graph_tab:
             if st.session_state.get("demo_show_graph", True) and trace:
@@ -1679,6 +1946,7 @@ def _render_debate_view(trace: ProofTrace | None) -> None:
         return
 
     events = trace.events
+    premises = [event for event in events if event.kind == "premise"]
     supports = [event for event in events if event.kind == "support"]
     attacks = [event for event in events if event.kind == "attack"]
     warrants = [event for event in events if event.kind == "warrant"]
@@ -1699,29 +1967,31 @@ def _render_debate_view(trace: ProofTrace | None) -> None:
     c3.metric("Warrants", len(warrants))
     c4.metric("Unresolved challenges", len(unresolved))
 
-    _render_debate_round_cards(trace)
-
-    with st.expander("Classic argument lists", expanded=False):
-        left, middle, right = st.columns(3)
-        with left:
-            st.subheader("Support")
-            for event in supports[:12]:
-                with st.expander(f"{event.actor} -> {event.metadata.get('severity', '-')}", expanded=False):
-                    st.write(event.claim)
-                    st.caption(f"References: {', '.join(event.references or []) or '-'}")
-        with middle:
-            st.subheader("Attack / Critique")
-            for event in attacks[:12]:
-                with st.expander(f"{event.actor} -> {event.metadata.get('type', event.kind)}", expanded=False):
-                    st.write(event.claim)
-                    st.caption(f"Challenges: {', '.join(event.references or []) or '-'}")
-        with right:
-            st.subheader("Resolution")
-            for event in claims + validations:
-                status = event.metadata.get("status", event.kind)
-                with st.expander(f"{event.actor} -> {status}", expanded=False):
-                    st.write(event.claim)
-                    st.caption(f"References: {', '.join(event.references or []) or '-'}")
+    left, middle, right = st.columns(3)
+    display_ids = _event_display_id_map(trace)
+    with left:
+        st.subheader("Support")
+        st.caption("Evidence, warrants, claims, and supporting arguments.")
+        for event in (premises + supports + warrants + claims)[:14]:
+            with st.expander(f"{display_ids.get(event.id, event.id)} | {event.actor} -> {_apec_event_type(event)}", expanded=False):
+                st.write(event.claim)
+                st.caption(f"References: {', '.join(_display_refs(event.references or [], display_ids)) or '-'}")
+    with middle:
+        st.subheader("Attack / Critique")
+        st.caption("Rebutting, undercutting, and undermining moves.")
+        for event in attacks[:14]:
+            with st.expander(f"{display_ids.get(event.id, event.id)} | {event.actor} -> {_apec_event_type(event)}", expanded=False):
+                st.write(event.claim)
+                st.caption(f"Challenges: {', '.join(_display_refs(event.references or [], display_ids)) or '-'}")
+    with right:
+        st.subheader("Resolution")
+        st.caption("Validation, review, requests, and final dispositions.")
+        resolution_events = validations + [event for event in events if event.kind in {"request", "revision"}]
+        for event in resolution_events[:14]:
+            status = event.metadata.get("status", _apec_event_type(event))
+            with st.expander(f"{display_ids.get(event.id, event.id)} | {event.actor} -> {status}", expanded=False):
+                st.write(event.claim)
+                st.caption(f"References: {', '.join(_display_refs(event.references or [], display_ids)) or '-'}")
 
     if unresolved:
         st.warning("Some claims or supports are still challenged. Inspect the argument graph for the unresolved red-bordered nodes.")
@@ -1741,8 +2011,13 @@ def _render_debate_view(trace: ProofTrace | None) -> None:
         )
 
     st.divider()
-    st.subheader("Agent conversation transcript")
-    _render_agent_conversation(trace)
+    _render_reviewer_explanation_views(trace, "debate_explain")
+
+    with st.expander("Round-based view", expanded=False):
+        _render_debate_round_cards(trace)
+
+    with st.expander("Agent conversation transcript", expanded=False):
+        _render_agent_conversation(trace)
 
 
 def _ai_event_is_grounded(event: Any, events_by_id: Dict[str, Any]) -> bool:
@@ -1756,7 +2031,7 @@ def _ai_event_is_grounded(event: Any, events_by_id: Dict[str, Any]) -> bool:
     )
 
 
-def _ai_trust_score(event: Any, batch_events: List[Any], events_by_id: Dict[str, Any]) -> Tuple[int, int, List[str]]:
+def _ai_trace_completeness(event: Any, batch_events: List[Any], events_by_id: Dict[str, Any]) -> Tuple[int, int, List[str]]:
     score = 0
     checks = []
     grounded = _ai_event_is_grounded(event, events_by_id)
@@ -1811,25 +2086,25 @@ def _render_ai_vs_deterministic_comparison(trace: ProofTrace, batch_events: List
             "AI agents": ai_by_role.get("risk_claim", ai_by_role.get("supporting_argument")).claim
             if ai_by_role.get("risk_claim") or ai_by_role.get("supporting_argument")
             else "-",
-            "Trust signal": "Agreement is stronger when the AI claim links back to deterministic discovery or risk events.",
+            "Review cue": "Agreement is more review-ready when the AI claim links back to deterministic discovery or risk events.",
         },
         {
             "Decision area": "Constraints and critique",
             "Deterministic agents": "; ".join(event.claim for event in events_by_kind["constraints"][-2:]) or "-",
             "AI agents": ai_by_role.get("counterargument").claim if ai_by_role.get("counterargument") else "-",
-            "Trust signal": "The workflow is safer when both deterministic and AI agents preserve objections.",
+            "Review cue": "The workflow is more review-ready when both deterministic and AI agents preserve objections.",
         },
         {
             "Decision area": "Migration plan",
             "Deterministic agents": "; ".join(event.claim for event in events_by_kind["plan"][-1:]) or "-",
             "AI agents": ai_by_role.get("migration_recommendation").claim if ai_by_role.get("migration_recommendation") else "-",
-            "Trust signal": "Planner claims should be evidence-linked and remain blocked until review.",
+            "Review cue": "Planner claims should be evidence-linked and remain blocked until review.",
         },
         {
             "Decision area": "Human governance",
             "Deterministic agents": "; ".join(event.claim for event in events_by_kind["review"][-1:]) or "-",
             "AI agents": ai_by_role.get("human_review_request").claim if ai_by_role.get("human_review_request") else "-",
-            "Trust signal": "AI may request review, but only a human review event validates the decision.",
+            "Review cue": "AI may request review, but only a human review event validates the decision.",
         },
     ]
     st.subheader("AI vs deterministic agent comparison")
@@ -1852,15 +2127,15 @@ def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
     agreements = [event for event in batch_events if event.kind in {"support", "claim", "warrant"}]
     disagreements = [event for event in batch_events if event.kind == "attack"]
     reviewed = [event for event in batch_events if event.metadata.get("review_status") != "pending_review"]
-    trust_scores = [_ai_trust_score(event, batch_events, events_by_id)[0] for event in batch_events]
-    average_trust = round(sum(trust_scores) / len(trust_scores), 1) if trust_scores else 0
+    completeness_scores = [_ai_trace_completeness(event, batch_events, events_by_id)[0] for event in batch_events]
+    average_completeness = round(sum(completeness_scores) / len(completeness_scores), 1) if completeness_scores else 0
 
-    st.subheader("AI agent participation and trust")
+    st.subheader("AI agent participation and trace completeness")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("AI argument moves", len(batch_events))
     c2.metric("AI role agents", len({event.actor for event in batch_events}))
     c3.metric("Evidence-grounded", f"{len(grounded)}/{len(batch_events)}")
-    c4.metric("Trust score", f"{average_trust}/5")
+    c4.metric("Trace completeness", f"{average_completeness}/5")
     c5.metric("Human-reviewed", f"{len(reviewed)}/{len(batch_events)}")
 
     rows = []
@@ -1872,7 +2147,7 @@ def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
                 if reference in events_by_id and not events_by_id[reference].metadata.get("ai_generated")
             }
         )
-        trust_score, trust_max, trust_checks = _ai_trust_score(event, batch_events, events_by_id)
+        completeness_score, completeness_max, completeness_checks = _ai_trace_completeness(event, batch_events, events_by_id)
         grounded_label = "Evidence-grounded" if _ai_event_is_grounded(event, events_by_id) else "Not evidence-grounded"
         rows.append(
             {
@@ -1881,8 +2156,8 @@ def _render_ai_argumentation(trace: ProofTrace, interactive: bool) -> None:
                 "Move": event.kind,
                 "Claim": event.claim,
                 "Grounding": grounded_label,
-                "Trust score": f"{trust_score}/{trust_max}",
-                "Trust checklist": "; ".join(trust_checks),
+                "Trace completeness": f"{completeness_score}/{completeness_max}",
+                "Review readiness cues": "; ".join(completeness_checks),
                 "Confidence": f"{round(float(event.metadata.get('confidence', 0)) * 100)}%",
                 "Linked deterministic agents": ", ".join(linked_actors) or "AI-chain link",
                 "Human status": event.metadata.get("review_status", "pending_review"),
@@ -2432,10 +2707,10 @@ def _append_structured_ai_events(
 
     refreshed_by_id = {event.id: event for event in trace.events}
     for event in created:
-        score, maximum, checks = _ai_trust_score(event, created, refreshed_by_id)
-        event.metadata["trust_score"] = score
-        event.metadata["trust_score_max"] = maximum
-        event.metadata["trust_checks"] = checks
+        score, maximum, checks = _ai_trace_completeness(event, created, refreshed_by_id)
+        event.metadata["trace_completeness"] = score
+        event.metadata["trace_completeness_max"] = maximum
+        event.metadata["review_readiness_cues"] = checks
     return created
 
 
@@ -2529,10 +2804,10 @@ def _append_ai_debate_rounds(
             event.metadata.setdefault("attack_type", event.metadata.get("type"))
         event.metadata["apec_type"] = _apec_event_type(event)
         event.metadata["type"] = event.metadata["apec_type"]
-        score, maximum, checks = _ai_trust_score(event, ai_events + debate_events, refreshed_by_id)
-        event.metadata["trust_score"] = score
-        event.metadata["trust_score_max"] = maximum
-        event.metadata["trust_checks"] = checks
+        score, maximum, checks = _ai_trace_completeness(event, ai_events + debate_events, refreshed_by_id)
+        event.metadata["trace_completeness"] = score
+        event.metadata["trace_completeness_max"] = maximum
+        event.metadata["review_readiness_cues"] = checks
     return debate_events
 
 
@@ -2696,7 +2971,7 @@ def _render_agentic_ai_upgrade() -> None:
                     "counterargument": "attack",
                     "human_review_request": "validation request",
                 }[role],
-                "Trust rule": "Must be evidence-linked, confidence-scored, counterargument-aware, and human-reviewed.",
+                "Review rule": "Must be evidence-linked, confidence-scored, counterargument-aware, and human-reviewed.",
             }
             for role, agent_name in AI_ROLE_AGENTS.items()
             if role in selected_ai_roles
@@ -2931,7 +3206,7 @@ def _apec_main_event(event: ProofEvent) -> str:
 def _apec_event_type(event: ProofEvent) -> str:
     role = str(event.metadata.get("argument_role") or "")
     raw_type = str(event.metadata.get("type") or "")
-    if raw_type.startswith(("support_", "attack_", "validation_")):
+    if raw_type.startswith(("support_", "attack_", "validation_", "request_", "revision_")):
         return raw_type
     raw_attack_type = str(event.metadata.get("attack_type") or raw_type or "")
     status = str(event.metadata.get("status") or event.metadata.get("review_status") or "")
@@ -2963,6 +3238,10 @@ def _apec_event_type(event: ProofEvent) -> str:
         if role == "risk_claim":
             return "support_claim"
         return "support_elaborate"
+    if event.kind == "request":
+        return "request_evidence"
+    if event.kind == "revision":
+        return "revision_plan"
     return f"support_{event.kind}"
 
 
@@ -3417,7 +3696,7 @@ def _build_university_markdown_report(
             refs = ", ".join(event.references or [])
             lines.append(f"- **{event.id} | {event.actor} / {event.kind}:** {event.claim} (refs: {refs or '-'})")
     elif include_proof_events:
-        lines.append("No proof trace is attached. Run the Agent Reasoning page to include support, attack, warrant, claim, and validation events.")
+        lines.append("No proof trace is attached. Run the Agent & Human Reasoning page to include support, attack, warrant, claim, and validation events.")
 
     if include_playbooks:
         lines.extend(["", "## Remediation Backlog", ""])
@@ -3871,6 +4150,8 @@ def _render_findings(findings: List[Dict[str, Any]]) -> None:
     st.code(str(finding.get("evidence") or "No evidence string available."))
     st.markdown("**Description**")
     st.write(finding.get("description", ""))
+    if not st.session_state.get("proof_trace"):
+        st.info("Run Agent & Human Reasoning to link this finding to proof events.")
 
 
 def _render_human_review_form(
@@ -3880,7 +4161,7 @@ def _render_human_review_form(
     key_prefix: str,
 ) -> None:
     review = finding.get("review", {})
-    st.markdown("**Human review decision**")
+    st.markdown("**Final human decision**")
     statuses = ["open", "planned", "accepted", "false_positive", "fixed", "needs_review"]
     current_status = review.get("status", "open")
     status = st.selectbox(
@@ -3925,10 +4206,10 @@ def _render_human_review_form(
 
 
 def _render_review_page() -> None:
-    st.header("Human Review")
+    st.header("Final Human Decision")
     findings = st.session_state.get("findings", [])
     if not findings:
-        _empty_state("No findings to review", "Run Demo Mode or scan an evidence source first. Human Review links findings to APEC-PS trace events and human decisions.")
+        _empty_state("No findings to review", "Run Demo Mode or scan an evidence source first. Final Human Decision links findings to APEC-PS trace events and human decisions.")
         return
 
     enriched = _attach_operational_metadata(findings)
@@ -3963,7 +4244,7 @@ def _render_review_page() -> None:
     )
 
     review_tab, decision_tab, trace_tab, playbook_tab = st.tabs(
-        ["Human review", "Finding-to-decision", "Trace links", "Remediation playbook"]
+        ["Final human decision", "Finding-to-decision", "Trace links", "Remediation playbook"]
     )
     with review_tab:
         _render_human_review_form(finding, findings, trace, "review_page")
@@ -3990,7 +4271,7 @@ def _render_argument_graphs_page() -> None:
     st.header("Argument Graphs")
     trace: ProofTrace | None = st.session_state.get("proof_trace")
     if not trace:
-        _empty_state("No argument graph yet", "Run Demo Mode, Agent Reasoning, or Agentic AI first to create an APEC-PS proof trace.")
+        _empty_state("No argument graph yet", "Run Demo Mode, Agent & Human Reasoning, or Agentic AI first to create an APEC-PS proof trace.")
         return
     st.write("Inspect the APEC-PS proof trace as a graph of evidence, support, attacks, warrants, plans, AI-generated arguments, and human validation.")
     _render_graph(trace)
@@ -3999,9 +4280,6 @@ def _render_argument_graphs_page() -> None:
         _render_formal_apecps_view(trace)
     with st.expander("Temporal predicates", expanded=False):
         _render_temporal_predicates(trace)
-    with st.expander("Proof-event trace table", expanded=False):
-        st.caption("This is the underlying APEC-PS trace used to build the graph. Each row is a proof event with an id, actor, event type, claim, references, and metadata.")
-        _render_trace(trace)
 
 
 def _render_trace(trace: ProofTrace) -> None:
@@ -4501,8 +4779,8 @@ def _node_display_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
             "model",
             "confidence",
             "grounding_status",
-            "trust_score",
-            "trust_score_max",
+            "trace_completeness",
+            "trace_completeness_max",
             "review_status",
             "evidence_finding_ids",
         ]
@@ -4745,7 +5023,7 @@ def _build_argument_graph_html(
                 f"<br>Model: {metadata.get('model', '-')}"
                 f"<br>Confidence: {metadata.get('confidence', '-')}"
                 f"<br>Grounding: {metadata.get('grounding_status', '-')}"
-                f"<br>Trust score: {metadata.get('trust_score', '-')}/{metadata.get('trust_score_max', '-')}"
+                f"<br>Trace completeness: {metadata.get('trace_completeness', '-')}/{metadata.get('trace_completeness_max', '-')}"
                 f"<br>Human review: {metadata.get('review_status', 'pending_review')}"
             )
         label = f"{node['actor']}\n{event_type}"
@@ -5291,13 +5569,13 @@ def _render_pqc_report_export(html_report: str, json_export: str) -> None:
                     st.error(f"Decryption failed: {exc}")
 
 
-def _render_graph(trace: ProofTrace) -> None:
+def _render_graph(trace: ProofTrace) -> str | None:
     try:
         from pyvis.network import Network
         import streamlit.components.v1 as components
     except Exception:
         st.warning("Install pyvis to view the interactive argument graph.")
-        return
+        return None
 
     events_by_id = {event.id: event for event in trace.events}
     display_ids = _event_display_id_map(trace)
@@ -5431,7 +5709,7 @@ def _render_graph(trace: ProofTrace) -> None:
                 f"<br>Model: {metadata.get('model', '-')}"
                 f"<br>Confidence: {metadata.get('confidence', '-')}"
                 f"<br>Grounding: {metadata.get('grounding_status', '-')}"
-                f"<br>Trust score: {metadata.get('trust_score', '-')}/{metadata.get('trust_score_max', '-')}"
+                f"<br>Trace completeness: {metadata.get('trace_completeness', '-')}/{metadata.get('trace_completeness_max', '-')}"
                 f"<br>Human review: {metadata.get('review_status', 'pending_review')}"
             )
 
@@ -5496,9 +5774,10 @@ def _render_graph(trace: ProofTrace) -> None:
         )
     if not visible_ids:
         st.info("No graph nodes match the search.")
-        return
+        return selected_event_id or None
     html = _inject_graph_click_inspector(net.generate_html(notebook=False), node_details, include_legend=False)
     components.html(html, height=height + 80, scrolling=True)
+    return selected_event_id or None
 
 
 def _safe_extract_zip(archive_path: Path, destination: Path) -> Path:
@@ -5765,41 +6044,48 @@ def main() -> None:
         else:
             _empty_state("No findings yet", "Use Evidence Sources to scan a repository, upload, GitHub project, or live TLS endpoint. Demo Mode can also create a complete example with findings and agent reasoning.")
 
-    elif step == "Human Review":
+    elif step == "Final Human Decision":
         _render_review_page()
 
-    elif step == "Agent Reasoning":
-        st.header("Agent Reasoning")
+    elif step == "Agent & Human Reasoning":
+        st.header("Agent & Human Reasoning")
         findings = st.session_state.get("findings", [])
         if not findings:
             _empty_state("Agents need scanner evidence", "Run a scan first so the Discovery, Risk, Compliance, Planning, Critic, and Human Review agents have findings to reason over.")
             return
-        selected_agents = _render_agent_selector()
-        if not selected_agents:
-            st.warning("Select at least one agent.")
-            return
-        if st.button("Run agents", type="primary"):
-            trace = ProofTrace()
-            progress = st.progress(0)
-            for idx, agent in enumerate(selected_agents, start=1):
-                agent.evaluate(findings, trace)
-                progress.progress(idx / len(selected_agents), text=f"Executed {agent.name}")
-            st.session_state.proof_trace = trace
-            scan_id = _save_scan(
-                st.session_state.get("project_name_input") or st.session_state.get("project_name", "default-project"),
-                f"agent-trace:{st.session_state.get('repo_path', '')}",
-                findings,
-                trace,
-            )
-            st.session_state.last_scan_id = scan_id
-            st.success(f"Generated {len(trace.events)} proof events")
+        pipeline_tab, human_actions_tab = st.tabs(["Agent pipeline", "Human review actions in proof-events"])
+        with pipeline_tab:
+            selected_agents = _render_agent_selector()
+            if not selected_agents:
+                st.warning("Select at least one agent.")
+                return
+            if st.button("Run agents", type="primary"):
+                trace = ProofTrace()
+                progress = st.progress(0)
+                for idx, agent in enumerate(selected_agents, start=1):
+                    agent.evaluate(findings, trace)
+                    progress.progress(idx / len(selected_agents), text=f"Executed {agent.name}")
+                st.session_state.proof_trace = trace
+                scan_id = _save_scan(
+                    st.session_state.get("project_name_input") or st.session_state.get("project_name", "default-project"),
+                    f"agent-trace:{st.session_state.get('repo_path', '')}",
+                    findings,
+                    trace,
+                )
+                st.session_state.last_scan_id = scan_id
+                st.success(f"Generated {len(trace.events)} proof events")
 
-        trace = st.session_state.get("proof_trace")
-        if trace:
-            _render_trace(trace)
-            _render_trace_quality_panel(trace)
-        else:
-            _empty_state("No proof trace yet", "Select the agents you want and click Run agents to create the APEC-PS support, attack, warrant, claim, and validation events.")
+            trace = st.session_state.get("proof_trace")
+            if trace:
+                _render_trace(trace)
+            else:
+                _empty_state("No proof trace yet", "Select the agents you want and click Run agents to create the APEC-PS support, attack, warrant, claim, and validation events.")
+        with human_actions_tab:
+            trace = st.session_state.get("proof_trace")
+            if trace:
+                _render_human_trace_action_panel(trace, "agent_reasoning_human_action")
+            else:
+                _empty_state("No proof events to review", "Run the agent pipeline first, then add human proof-event actions such as request evidence, challenge reasoning, or accept/defer.")
 
     elif step == "Agent Debate":
         _render_debate_view(st.session_state.get("proof_trace"))

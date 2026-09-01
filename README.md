@@ -24,12 +24,12 @@ and security-workflow prototyping. It is not a production security scanner.
 
 - **Demo Mode** for one-click university presentations, including optional
   Agentic AI quick run, argument-graph preview, and human review.
-- **Grouped sidebar workflow** with Overview, Input, Reasoning, and Output
+- **Grouped sidebar workflow** with Quick View, Input, Reasoning, and Output
   sections for clearer research demonstrations.
 - **Academic and operational report exports** with distinct research-facing
   and security-facing content.
 - **Guided presentation walkthrough** for a clear live-demo narrative.
-- **Executive Dashboard** with risk score, severity counts, top risks, review
+- **Executive Dashboard** after Crypto Findings, with risk score, severity counts, top risks, review
   status, and unresolved argumentation challenges.
 - **Repository and ZIP scanning** for source code, configs, certificates, and
   infrastructure files.
@@ -42,7 +42,11 @@ and security-workflow prototyping. It is not a production security scanner.
 - **Agentic reasoning pipeline** with selectable specialist agents, a central
   AI coordinator, AI role-agents, debate rounds, critique, and human consensus.
 - **Agent Debate View** focused on the proof-event conversation and APEC-PS
-  support/attack/validation moves.
+  support/attack/resolution lists.
+- **Reviewer explanation views** for `Why?`, `Why not?`, and `What changed?`
+  questions over the selected proof event.
+- **Human review action panel** in Agent & Human Reasoning for requesting evidence,
+  challenging reasoning, or accepting/deferring a proof event.
 - **Interactive argument graph** with layouts, search, path highlighting,
   grouping, legends, and unresolved attack markers.
 - **Trace Quality panel** that checks identifier uniqueness, reference
@@ -58,7 +62,7 @@ and security-workflow prototyping. It is not a production security scanner.
   `attack_rebut`, and `validation_accept` are stored as metadata.
 - **Readable proof-event identifiers** such as `PE1`, `PE2`, and `PE3` in the
   graph, proof-event trace, JSON export, and temporal predicates.
-- **Human Review workflow** with reviewer decision first, finding-to-decision view, trace links, remediation
+- **Final Human Decision workflow** with reviewer decision first, finding-to-decision view, trace links, remediation
   playbook, reviewer, reason, status, and expiry.
 - **Persistent scan history** using local SQLite.
 - **Report exports** in Markdown, PDF, JSON, SARIF, HTML, and standalone graph
@@ -142,17 +146,18 @@ The fastest presentation flow uses the grouped sidebar workflow:
    graph after run**.
 4. Click **Run selected demo scenario**.
 5. In Demo Mode, present the tabs in this order:
-   **Argument graph**, **Human review**, **Finding-to-decision**,
+   **Argument graph**, **Final human decision**, **Finding-to-decision**,
    **Reports**, and **PQC secure exchange**.
 6. Go to **Crypto Findings** to show the scanner evidence.
-7. Go to **Agent Reasoning** to show selected specialist agents and the deterministic
-   proof-event trace.
-8. Go to **Human Review** to record a decision, inspect finding-to-decision,
+7. Go to **Dashboard** to show the executive overview after the findings.
+8. Go to **Agent & Human Reasoning** to show selected specialist agents, the deterministic
+   proof-event trace, and human proof-event actions.
+9. Go to **Final Human Decision** to record a decision, inspect finding-to-decision,
    trace links, and remediation playbook.
-9. Go to **Reports** to export the academic report, operational report,
+10. Go to **Reports** to export the academic report, operational report,
     security tooling formats, or PQC-protected package.
 
-The sidebar is organized into **Overview**, **Input**, **Reasoning**, and
+The sidebar is organized into **Quick View**, **Input**, **Reasoning**, and
 **Output** categories so audiences can see where each part of the prototype
 belongs.
 
@@ -175,7 +180,7 @@ Use this script for a 5-7 minute live demo:
 2. **Run demo**: "Demo Mode loads a sample repository, scans cryptographic
    evidence, runs specialist agents, and optionally adds AI coordinator
    arguments."
-3. **Trace quality**: "Before trusting the output, the app checks whether proof
+3. **Trace quality**: "Before using the output, the app checks whether proof
    events have unique IDs, valid references, typed attacks, warrants, evidence
    links, and human-review status."
 4. **Argument graph**: "The graph shows three main event types: support,
@@ -184,7 +189,7 @@ Use this script for a 5-7 minute live demo:
 5. **Formal APEC-PS view**: "For the paper, each event can also be rendered as
    `PEi = <communicate <Phi, c>, w>` with temporal predicates such as
    `Happens(PEi, ti)` and `Valid(PEi, f, ti)`."
-6. **Review and reports**: "The Human Review menu records the final governance
+6. **Review and reports**: "The Final Human Decision menu records the final governance
    decision, and the Reports menu exports either academic or operational
    evidence packages."
 
@@ -232,7 +237,7 @@ Button:
 Demo output tabs:
 
 - **Argument graph**
-- **Human review**
+- **Final human decision**
 - **Finding-to-decision**
 - **Reports**
 - **PQC secure exchange**
@@ -299,7 +304,7 @@ certificate signature algorithm.
 
 Presents normalized scanner output from the selected evidence source. Human
 review, trace links, finding-to-decision explanation, and remediation playbooks
-are handled in the separate **Human Review** page so the scanner output stays
+are handled in the separate **Final Human Decision** page so the scanner output stays
 clean.
 
 Controls:
@@ -324,14 +329,14 @@ Findings table:
 - **evidence**: code/config/certificate evidence.
 - **description**: risk explanation.
 
-### Human Review
+### Final Human Decision
 
-The Human Review page is the first page in the Output menu. It connects raw scanner
+The Final Human Decision page is the first page in the Output menu. It connects raw scanner
 findings to APEC-PS reasoning and human decision-making.
 
 Tabs:
 
-- **Human review**: records the human disposition for the selected finding.
+- **Final human decision**: records the human disposition for the selected finding.
 - **Finding-to-decision**: summarizes how the selected finding moves from
   evidence to risk interpretation, challenge, migration plan, and decision
   state.
@@ -358,11 +363,18 @@ Fields:
 Saving a review decision stores it in SQLite and, if a proof trace exists,
 adds a HumanReview proof event.
 
-### Agent Reasoning
+### Agent & Human Reasoning
 
 Runs selectable deterministic specialist agents over the current findings.
 This page is used to build the auditable baseline trace before, or alongside,
 the Agentic AI coordinator.
+
+Tabs:
+
+- **Agent pipeline**: select deterministic agents, run the proof-event
+  pipeline, and inspect the proof-event table.
+- **Human review actions in proof-events**: add reviewer-generated proof events
+  such as evidence requests, reasoning challenges, acceptances, and deferrals.
 
 Agents:
 
@@ -395,6 +407,9 @@ Main event categories:
 - **support**: an event that contributes evidence, elaboration, warrant,
   strategy, solution, or claim support.
 - **attack**: an event that challenges a premise, warrant, claim, or plan.
+- **request**: a reviewer-generated request for more evidence before accepting
+  an event.
+- **revision**: a revised claim or plan after an objection or new evidence.
 - **validation**: an event that records human review, acceptance, rejection,
   deferral, or risk acceptance.
 
@@ -409,6 +424,8 @@ Examples of detailed event types:
 - `attack_undermine`
 - `attack_undercut`
 - `attack_rebut`
+- `request_evidence`
+- `revision_plan`
 - `validation_accept`
 - `validation_defer`
 
@@ -417,10 +434,15 @@ links are stored as event metadata. This keeps the graph simple while still
 preserving the formal APEC-PS details in JSON, reports, and selected-node
 details.
 
+The page also includes the **Human review action** panel. It creates
+reviewer-generated proof events for requesting evidence, challenging reasoning,
+or accepting/deferring an event. Challenge target maps directly to APEC-PS
+attack types: premise -> undermine, warrant -> undercut, and claim -> rebut.
+
 ### Argument Graphs
 
 The Argument Graphs page visualizes the APEC-PS proof trace. It is separate
-from Agent Reasoning so the user can first generate a trace, then inspect it as a graph.
+from Agent & Human Reasoning so the user can first generate a trace, then inspect it as a graph.
 
 After the graph, the page shows **Trace Quality**, which summarizes structural integrity:
 unique IDs, reference resolution, attack typing, warrant coverage, evidence
@@ -467,24 +489,29 @@ Additional views:
 - **Temporal predicates**: shows the computed operational state for each
   event, including `Happens`, `Initiates`, `ActiveAt`, `Clipped`,
   `Terminates`, and `Valid`.
-- **Proof-event trace table**: provides the raw tabular trace for inspection
-  and export comparison.
-
 ### Agent Debate
 
-Explains the APEC-PS contribution as a round-based agent conversation rather
-than a flat event list. The Debate page groups proof events into:
+Explains the APEC-PS contribution as argument lists rather than a flat event
+log. The main view is organized into:
 
-- **Round 1 Evidence**: scanner observations and discovery support.
-- **Round 2 Risk Claim**: PQC risk interpretation and supporting arguments.
-- **Round 3 Counterargument**: rebutting, undercutting, and undermining moves.
-- **Round 4 Revised Plan**: staged migration strategy and mitigation plan.
-- **Round 5 Human Consensus**: validation, deferral, risk acceptance, or
-  review requirement.
+- **Support**: premises, warrants, claims, and supporting arguments.
+- **Attack / Critique**: rebutting, undercutting, and undermining moves.
+- **Resolution**: validation, review, requests, revisions, and dispositions.
+
+The round-based view and agent conversation transcript remain available as
+optional expanders.
 
 Use this page to explain why the system is not just a scanner. It creates an
 argumentation structure around the security findings and shows how agents move
 from evidence to disagreement, revision, and governance.
+
+The page also includes the three reviewer-oriented explanation questions:
+
+- **Why?** shows the selected recommendation with supporting warrants,
+  evidence, and referenced scanner findings.
+- **Why not?** shows attacks against the selected event or its supporting path.
+- **What changed?** shows the movement from initial proposal, to objection, to
+  revised proposal, to human decision.
 
 ### Agentic AI
 
@@ -512,14 +539,18 @@ These are represented as proof events with main categories `support`,
 confidence, grounding status, referenced proof events, and linked finding IDs
 are stored as metadata.
 
-The **Human consensus of AI argument** panel in **Agentic AI** is the trust
+The **Human consensus of AI argument** panel in **Agentic AI** is the review
 control for AI-generated proof events. It shows evidence-grounded AI moves,
 agreement and challenge counts, linked deterministic agents, provider/model
-provenance, confidence, grounding status, and human review state. A reviewer
+provenance, confidence, grounding status, trace-completeness cues, and human review state. A reviewer
 can accept, reject, or request revision of each AI argument. The decision
 becomes a linked `HumanReviewAgent` proof event and is retained in history,
 JSON, graph exports, and reports. AI-generated review requests never count as
 human approval.
+
+Trace-completeness cues are interface indicators only. They are not
+probabilities of correctness and should not be interpreted as validated
+measures of generalized trustworthiness.
 
 The public Streamlit deployment is expected to use **Groq Cloud** as the
 default hosted AI coordinator when `GROQ_API_KEY` is configured. A local
