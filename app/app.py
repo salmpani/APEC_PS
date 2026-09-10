@@ -6,6 +6,7 @@ import io
 import base64
 import hashlib
 import html
+import importlib
 import json
 import os
 import sqlite3
@@ -5378,12 +5379,63 @@ def _build_university_html_report(
 
 
 def _load_ml_kem_768():
-    try:
-        from pqcrypto.kem import ml_kem_768
+    module_names = ("pqcrypto.kem.ml_kem_768", "pqcrypto.kem.kyber768")
+    errors: List[str] = []
+    for module_name in module_names:
+        try:
+            return importlib.import_module(module_name)
+        except Exception as exc:
+            errors.append(f"{module_name}: {exc}")
+    raise RuntimeError(
+        "PQC export requires the `pqcrypto` package with ML-KEM-768 support. "
+        "Install or upgrade pqcrypto, then restart the app. Tried: " + "; ".join(errors)
+    )
 
-        return ml_kem_768
-    except Exception as exc:
-        raise RuntimeError("PQC export requires the `pqcrypto` package with ML-KEM-768 support.") from exc
+
+def _kem_call(kem: Any, names: Iterable[str], *args: bytes) -> Any:
+    for name in names:
+        fn = getattr(kem, name, None)
+        if callable(fn):
+            return fn(*args)
+    available = ", ".join(name for name in dir(kem) if not name.startswith("_"))
+    raise RuntimeError(
+        "The installed pqcrypto KEM module does not expose a supported API. "
+        f"Tried {', '.join(names)}. Available public attributes: {available}"
+    )
+
+
+def _kem_generate_keypair(kem: Any) -> Tuple[bytes, bytes]:
+    public_key, secret_key = _kem_call(kem, ("generate_keypair", "keypair", "generate_keys"))
+    return bytes(public_key), bytes(secret_key)
+
+
+def _kem_encapsulate(kem: Any, public_key: bytes) -> Tuple[bytes, bytes]:
+    kem_ciphertext, shared_secret = _kem_call(kem, ("encrypt", "encapsulate", "encap"), public_key)
+    return bytes(kem_ciphertext), bytes(shared_secret)
+
+
+def _kem_decapsulate(kem: Any, secret_key: bytes, kem_ciphertext: bytes) -> bytes:
+    names = ("decrypt", "decapsulate", "decap")
+    last_type_error: TypeError | None = None
+    for name in names:
+        fn = getattr(kem, name, None)
+        if not callable(fn):
+            continue
+        try:
+            return bytes(fn(secret_key, kem_ciphertext))
+        except TypeError as exc:
+            last_type_error = exc
+            try:
+                return bytes(fn(kem_ciphertext, secret_key))
+            except TypeError:
+                continue
+    if last_type_error is not None:
+        raise RuntimeError(f"The installed pqcrypto KEM decrypt API could not be called: {last_type_error}") from last_type_error
+    available = ", ".join(name for name in dir(kem) if not name.startswith("_"))
+    raise RuntimeError(
+        "The installed pqcrypto KEM module does not expose a supported decrypt API. "
+        f"Tried {', '.join(names)}. Available public attributes: {available}"
+    )
 
 
 def _b64encode(data: bytes) -> str:
@@ -5408,7 +5460,7 @@ def _derive_report_key(shared_secret: bytes, associated_data: bytes) -> bytes:
 
 def _generate_pqc_recipient_keypair() -> Dict[str, str]:
     kem = _load_ml_kem_768()
-    public_key, secret_key = kem.generate_keypair()
+    public_key, secret_key = _kem_generate_keypair(kem)
     return {
         "algorithm": "ML-KEM-768",
         "public_key": _b64encode(public_key),
@@ -5422,7 +5474,7 @@ def _encrypt_report_with_ml_kem(plaintext: bytes, public_key_b64: str, plaintext
 
     kem = _load_ml_kem_768()
     public_key = _b64decode(public_key_b64.strip())
-    kem_ciphertext, shared_secret = kem.encrypt(public_key)
+    kem_ciphertext, shared_secret = _kem_encapsulate(kem, public_key)
     associated_data = json.dumps(
         {
             "schema": "apec-ps-pqc-encrypted-report/v1",
@@ -5457,7 +5509,7 @@ def _decrypt_report_with_ml_kem(package_json: str, secret_key_b64: str) -> bytes
 
     kem = _load_ml_kem_768()
     package = json.loads(package_json)
-    shared_secret = kem.decrypt(_b64decode(secret_key_b64.strip()), _b64decode(package["kem_ciphertext"]))
+    shared_secret = _kem_decapsulate(kem, _b64decode(secret_key_b64.strip()), _b64decode(package["kem_ciphertext"]))
     associated_data = _b64decode(package["associated_data"])
     aes_key = _derive_report_key(shared_secret, associated_data)
     return AESGCM(aes_key).decrypt(_b64decode(package["nonce"]), _b64decode(package["ciphertext"]), associated_data)
@@ -5476,7 +5528,11 @@ def _render_pqc_report_export(html_report: str, json_export: str) -> None:
         return
 
     if st.button("Generate demo ML-KEM recipient keypair"):
-        st.session_state.pqc_recipient_keypair = _generate_pqc_recipient_keypair()
+        try:
+            st.session_state.pqc_recipient_keypair = _generate_pqc_recipient_keypair()
+            st.success("Demo ML-KEM recipient keypair generated.")
+        except Exception as exc:
+            st.error(f"Could not generate the demo ML-KEM keypair: {exc}")
 
     keypair = st.session_state.get("pqc_recipient_keypair")
     if keypair:
