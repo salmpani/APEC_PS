@@ -5404,33 +5404,102 @@ def _kem_call(kem: Any, names: Iterable[str], *args: bytes) -> Any:
     )
 
 
+def _as_kem_bytes(value: Any) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    for attr in ("to_bytes", "as_bytes", "serialize"):
+        fn = getattr(value, attr, None)
+        if callable(fn):
+            try:
+                converted = fn()
+                if isinstance(converted, int):
+                    continue
+                return _as_kem_bytes(converted)
+            except TypeError:
+                continue
+    for attr in ("raw", "data", "key", "value"):
+        if hasattr(value, attr):
+            return _as_kem_bytes(getattr(value, attr))
+    return bytes(value)
+
+
+def _kem_key_object(kem: Any, class_name: str, key_bytes: bytes) -> Any:
+    cls = getattr(kem, class_name, None)
+    if cls is None:
+        return key_bytes
+    for factory in (cls, getattr(cls, "from_bytes", None), getattr(cls, "deserialize", None), getattr(cls, "load", None)):
+        if not callable(factory):
+            continue
+        try:
+            return factory(key_bytes)
+        except TypeError:
+            continue
+        except ValueError:
+            continue
+    return key_bytes
+
+
 def _kem_generate_keypair(kem: Any) -> Tuple[bytes, bytes]:
-    public_key, secret_key = _kem_call(kem, ("generate_keypair", "keypair", "generate_keys"))
-    return bytes(public_key), bytes(secret_key)
+    public_key, secret_key = _kem_call(kem, ("generate_keypair", "keypair", "generate_keys", "keygen"))
+    return _as_kem_bytes(public_key), _as_kem_bytes(secret_key)
 
 
 def _kem_encapsulate(kem: Any, public_key: bytes) -> Tuple[bytes, bytes]:
-    kem_ciphertext, shared_secret = _kem_call(kem, ("encrypt", "encapsulate", "encap"), public_key)
-    return bytes(kem_ciphertext), bytes(shared_secret)
-
-
-def _kem_decapsulate(kem: Any, secret_key: bytes, kem_ciphertext: bytes) -> bytes:
-    names = ("decrypt", "decapsulate", "decap")
-    last_type_error: TypeError | None = None
+    names = ("encrypt", "encapsulate", "encap", "encaps")
+    last_error: Exception | None = None
+    public_key_options = (public_key, _kem_key_object(kem, "PublicKey", public_key))
     for name in names:
         fn = getattr(kem, name, None)
         if not callable(fn):
             continue
-        try:
-            return bytes(fn(secret_key, kem_ciphertext))
-        except TypeError as exc:
-            last_type_error = exc
+        for public_key_arg in public_key_options:
             try:
-                return bytes(fn(kem_ciphertext, secret_key))
-            except TypeError:
+                kem_ciphertext, shared_secret = fn(public_key_arg)
+                return _as_kem_bytes(kem_ciphertext), _as_kem_bytes(shared_secret)
+            except (TypeError, ValueError) as exc:
+                last_error = exc
+                continue
+    if last_error is not None:
+        raise RuntimeError(f"The installed pqcrypto KEM encapsulation API could not be called: {last_error}") from last_error
+    available = ", ".join(name for name in dir(kem) if not name.startswith("_"))
+    raise RuntimeError(
+        "The installed pqcrypto KEM module does not expose a supported encapsulation API. "
+        f"Tried {', '.join(names)}. Available public attributes: {available}"
+    )
+
+
+def _kem_decapsulate(kem: Any, secret_key: bytes, kem_ciphertext: bytes) -> bytes:
+    names = ("decrypt", "decapsulate", "decap", "decaps")
+    last_type_error: TypeError | None = None
+    last_value_error: ValueError | None = None
+    secret_key_options = (secret_key, _kem_key_object(kem, "SecretKey", secret_key))
+    for name in names:
+        fn = getattr(kem, name, None)
+        if not callable(fn):
+            continue
+        for secret_key_arg in secret_key_options:
+            try:
+                return _as_kem_bytes(fn(secret_key_arg, kem_ciphertext))
+            except TypeError as exc:
+                last_type_error = exc
+                try:
+                    return _as_kem_bytes(fn(kem_ciphertext, secret_key_arg))
+                except TypeError:
+                    continue
+                except ValueError as value_exc:
+                    last_value_error = value_exc
+                    continue
+            except ValueError as exc:
+                last_value_error = exc
                 continue
     if last_type_error is not None:
         raise RuntimeError(f"The installed pqcrypto KEM decrypt API could not be called: {last_type_error}") from last_type_error
+    if last_value_error is not None:
+        raise RuntimeError(f"The installed pqcrypto KEM decrypt API rejected the provided key or ciphertext: {last_value_error}") from last_value_error
     available = ", ".join(name for name in dir(kem) if not name.startswith("_"))
     raise RuntimeError(
         "The installed pqcrypto KEM module does not expose a supported decrypt API. "
