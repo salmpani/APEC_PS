@@ -827,7 +827,7 @@ School of Applied Mathematical and Physical Sciences, National Technical Univers
 Contact:
 
 ```text
-s.almpani@gmail.com
+salmpani@mail.ntua.gr
 ```
 
 Live demo:
